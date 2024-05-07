@@ -5,9 +5,13 @@
 # implementeras måste nedanstående specifikation följas. Biblioteket ska ligga i en separat
 # fil som kompileras och länkas tillsammans med testprogrammet Mprov64.s när sluttestet
 # sker.
+.data
+    input_buffer: .space 2048 # 2 KB
+    output_buffer: .space 2048 # 2 KB
+    input_position: .word 0 # position in input_buffer
+    output_position: .word 0 # position in output_buffer
 
-
-
+.text
 # --------- Inmatning ---------
 
 inImage:
@@ -16,9 +20,13 @@ inImage:
 # jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
 # är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
 # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
+    mov eax, 3 # add call number of sys_read into eax
+    mov ebx, 0 # load file descriptor for standard input in ebx
+    mov ecx, input_buffer # Pointer to our input buffer
+    mov edx, 2048 # The size of our input buffer
 
-
-
+    int 0x80 # Make system call
+    mov [input_position], 0 # Reset input position
 
 getInt:
 # Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
