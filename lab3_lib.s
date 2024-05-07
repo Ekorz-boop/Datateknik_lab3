@@ -13,6 +13,7 @@ inImage:
 
 
 
+
 getInt:
 @ Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
 @ tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
