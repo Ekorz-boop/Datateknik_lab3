@@ -19,6 +19,7 @@
 # jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
 # är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
 # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
+.global inImage
 inImage:
     movl $3, %eax # add call number of sys_read into eax
     movl $0, %ebx # load file descriptor for standard input in ebx
@@ -26,7 +27,7 @@ inImage:
     movl $2048, %edx # The size of our input buffer
 
     int $0x80 # Make system call
-    movb $0, [input_position] # Reset input position
+    movw $0, [input_position] # Reset input position
 
 # Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
 # tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
@@ -38,12 +39,15 @@ inImage:
 # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
 # returnerar värdet av ett inmatat tal.
 # Returvärde: inläst heltal
+.global getInt
 getInt:
     movq input_position, %rbx      # Load current input position
+    cmpq $2048, %rbx               # Compare with the size of the buffer
+    je  inImage                    # If at the end of the buffer, refill it
     movq %rbx, %rdi                # Save initial position for later
     movq $0, %rcx                  # Initialize the integer value to zero
     movq $1, %rax                  # Set a flag to determine if the number is positive or negative (1 for positive, 0 for negative)
-    movb (%rbx), %al               # Load the first character
+    movb (%rbx), %al 
 
     skip_whitespace:
         cmpb $' ', %al                 # Compare with space
@@ -118,6 +122,7 @@ getInt:
 # (buf i texten)
 # Parameter 2: maximalt antal tecken att läsa från inmatningsbufferten (n i texten)
 # Returvärde: antal överförda tecken
+.global getText
 getText:
     movq input_position, %rbx      # Load current input position
     movq %rbx, %rdi                # Save initial position for later
@@ -159,6 +164,7 @@ getText:
 # tom eller aktuell position i den är vid buffertens slut vid anrop av getChar ska getChar
 # kalla på inImage, så att getChar alltid returnerar ett tecken ur inmatningsbufferten.
 # Returvärde: inläst tecken
+.global getChar
 getChar:
     movq input_position, %rbx      # Load current input position
     movb (%rbx), %al               # Load character from input buffer
@@ -183,6 +189,7 @@ getInPos:
 # [0,MAXPOS], där MAXPOS beror av buffertens faktiska storlek. Om n<0, sätt positionen
 # till 0, om n>MAXPOS, sätt den till MAXPOS.
 # Parameter: önskad aktuell buffertposition (index), n i texten.
+.global setInPos
 setInPos:
     movq %rdi, %rax                 # Load the desired position into %rax
     cmpq $0, %rax                   # Compare with 0
@@ -205,6 +212,7 @@ setInPos:
 # Rutinen ska skriva ut strängen som ligger i utbufferten i terminalen. Om någon av de
 # övriga utdatarutinerna når buffertens slut, så ska ett anrop till outImage göras i dem, så
 # att man får en tömd utbuffert att jobba mot.
+.global outImage
 outImage:
     movl $4, %eax
     movl $1, %ebx
@@ -220,6 +228,7 @@ outImage:
 # position. Glöm inte att uppdatera aktuell position innan rutinen lämnas.
 # Parameter: tal som ska läggas in i bufferten (n i texten)
     # Param: eax = int that should be put into the output buffer
+.global putInt
 putInt:
     movl output_buffer, %edi
     addl output_position, %edi # add current buffer position to the pointer
@@ -229,7 +238,7 @@ putInt:
         # 
         xorl %edx, %edx # clear edx
         divl %ecx # divide eax by 10, result in eax, remainder in edx
-        addb "0", %dl  # make into ASCII
+        addb $48, %dl  # make into ASCII
         decl %edi # decrease the buffer position
         xorl %edi, %edi # zero out edi
         movb %dl, %dil # store ASCII character in buffer
@@ -246,6 +255,7 @@ putInt:
 # Om bufferten blir full så ska ett anrop till outImage göras, så att man får en tömd utbuffert
 # att jobba vidare mot.
 # Parameter: adress som strängen ska hämtas till utbufferten ifrån (buf i texten)
+.global putText
 putText:
     mov %rsi, %rdi # Copy string to rdi
 
@@ -275,6 +285,7 @@ putText:
 # Om bufferten blir full när getChar anropas ska ett anrop till outImage göras, så att man
 # får en tömd utbuffert att jobba vidare mot.
 # Parameter: tecknet som ska läggas i utbufferten (c i texten)
+.global putChar
 putChar:
     cmpq $2048, [output_position]
     jge full_buffert_put_char # if buffer is full, call full_buffert
@@ -293,6 +304,7 @@ putChar:
 
 # Rutinen ska returnera aktuell buffertposition för utbufferten.
 # Returvärde: aktuell buffertposition (index)
+.global getOutPos
 getOutPos:
     movq output_position, %rax  # Load the current output position into %rax
     ret                          # Return from the routine
@@ -301,6 +313,7 @@ getOutPos:
 # [0,MAXPOS], där MAXPOS beror av utbuffertens storlek. Om n<0 sätt den till 0, om
 # n>MAXPOS sätt den till MAXPOS.
 # Parameter: önskad aktuell buffertposition (index), n i texten
+.global setOutPos
 setOutPos:
     movq %rdi, %rax                 # Load the desired position into %rax
     cmpq $0, %rax                   # Compare with 0
