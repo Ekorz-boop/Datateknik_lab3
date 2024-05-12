@@ -10,6 +10,7 @@
     output_buffer: .space 64 
     input_buffer_pos: .space 8
     output_buffer_pos: .space 8
+    .equ MAXPOS, 64
 
 .text
 # --- What we use registers for ---
@@ -22,11 +23,9 @@
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
 put_into_output_buffer:
     # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
-    pushq $0
     pushq %rbx # Caller owned register, save it
     # Calculate the correct position in the output buffer
-    imulq $8, %rcx, %r8 # Multiply the current position with 8 to get the correct position in the buffer
-    addq %r8, %rbx # Add the position to the buffer to get the correct position
+    addq %rcx, %rbx # Add the position to the buffer to get the correct position
     # Put the value into the output buffer
     movb %al, (%rbx)
 
@@ -36,11 +35,9 @@ put_into_output_buffer:
 
 
 put_into_input_buffer:
-    pushq $0
     # rsi = input buffer memory adress, rdi = input buffer pos, al = value to put into input buffer
     # Calculate the correct position in the input buffer
-    imulq $8, %rdi, %r8 # Multiply the current position with 8 to get the correct position in the buffer
-    addq %r8, %rsi # Add the position to the buffer to get the correct position
+    addq %rdi, %rsi # Add the position to the buffer to get the correct position
     # Put the value into the input buffer
     movb %al, (%rsi)
 
@@ -56,15 +53,16 @@ put_into_input_buffer:
 # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
 .global inImage
 inImage:
-    push $0
+    pushq $0 # Uses external function call
     movq $input_buffer, %rdi # arg1
-    movq $64, %rsi # arg2
+    movq $MAXPOS, %rsi # arg2
     movq stdin, %rdx # arg3
     call fgets
     
     movq $0, input_buffer_pos # Reset input buffer position
 
     # Terminate inImage
+    popq %rax
     ret
 
 
@@ -102,7 +100,6 @@ getText:
 # Returvärde: inläst tecken
 .global getChar
 getChar:
-    pushq $0
     movq input_buffer_pos, %rdi # Get the current position of the input buffer
     leaq input_buffer, %rsi # Get the input buffer memory adress
 
@@ -147,35 +144,29 @@ setInPos:                         # Return from the routine
 # att man får en tömd utbuffert att jobba mot.
 .global outImage
 outImage:
-    push $0
+    push $0 # Uses external function call
     # Move value fo outbuffer to rbx
     movq $output_buffer, %rdi
     call puts
-
+    # Reset position
+    movq $0, output_buffer_pos
     # Terminate outImage
+    popq %rax
     ret
 
 # Rutinen ska lägga ut talet n som sträng i utbufferten från och med buffertens aktuella
 # position. Glöm inte att uppdatera aktuell position innan rutinen lämnas.
 # Parameter: tal som ska läggas in i bufferten (n i texten)
-# Param: eax = int that should be put into the output buffer
+# input: rdi = int
 .global putInt
 putInt:
-    push $0
     pushq %rbx # Caller owned register, save it
-    # Move the current outoput position into rcx
-    movq output_buffer_pos, %rcx
-    # Load output buffer into rbx
-    leaq output_buffer, %rbx
-    call putInt_loop
-
-    # Terminate putInt
-    popq %rbx
-    ret
+    movq output_buffer_pos, %rcx  # Move the current outoput position into rcx
+    leaq output_buffer, %rbx # Load output buffer into rbx
 
     putInt_loop:
         # Move the first 8 bits of n into al
-        movb (%eax), %al
+        movb (%rdi), %al
         # Check if it's 0, if it is we are done
         cmpb $0, %al
         je exit_putInt_loop
@@ -184,13 +175,13 @@ putInt:
         call put_into_output_buffer
         # Increment position (check so we don't go out of bounds first)
         cmpq $64, %rcx
-        call outImage
-        inc %rcx
-        # Delete first 8 bits with rightshift to read the next 8 bits in the next iteration
-        shrq $8, %rax
+        je outImage
+        incq %rdi # Increment the value
+        incq %rcx # Increment the position
         jmp putInt_loop
 
     exit_putInt_loop:
+        popq %rbx
         ret
 
 
@@ -199,8 +190,35 @@ putInt:
 # Om bufferten blir full så ska ett anrop till outImage göras, så att man får en tömd utbuffert
 # att jobba vidare mot.
 # Parameter: adress som strängen ska hämtas till utbufferten ifrån (buf i texten)
+# Input: rdi = buf
 .global putText
 putText:
+    leaq output_buffer, %rbx
+    movq output_buffer_pos, %rcx
+    jmp putText_loop
+
+    putText_loop:
+        # Get first 8 bits of the string
+        movb (%rdi), %al
+        # Check if it's 0, if it is we are done
+        cmpb $0, %al
+        je exit_putText_loop
+        # Move the first 8 bits of n into the output buffer at the current position
+        # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
+        call put_into_output_buffer
+        # Increment position (check so we don't go out of bounds first)
+        cmpq $64, %rcx
+        je outImage
+        inc %rdi
+        inc %rcx
+        jmp putText_loop
+
+    exit_putText_loop:
+        movq %rcx, output_buffer_pos
+        ret
+
+
+
 
 # Rutinen ska lägga tecknet c i utbufferten och flytta fram aktuell position i den ett steg.
 # Om bufferten blir full när getChar anropas ska ett anrop till outImage göras, så att man
@@ -208,13 +226,12 @@ putText:
 # Parameter: tecknet som ska läggas i utbufferten (c i texten)
 .global putChar
 putChar:
-    pushq $0
     pushq %rbx # Caller owned register, save it
     call getChar # Get character c from input buffer
     # Check if the output buffer is full
     leaq output_buffer, %rbx
     movq output_buffer_pos, %rcx
-    cmpq $64, %rcx
+    cmpq $MAXPOS, %rcx
     je outImage # If the output buffer is full, call outImage to empty it
     # Move the character to the output buffer
     call put_into_output_buffer
@@ -222,18 +239,39 @@ putChar:
     inc %rcx
 
     # Terminate putChar
-    pop %rbx
+    popq %rbx
     ret
+
 
 # Rutinen ska returnera aktuell buffertposition för utbufferten.
 # Returvärde: aktuell buffertposition (index)
 .global getOutPos
-getOutPos:                      # Return from the routine
+getOutPos:
+    movq output_buffer_pos, %rax
+    ret
+
 
 # Rutinen ska sätta aktuell buffertposition för utbufferten till n. n måste dock ligga i intervallet
 # [0,MAXPOS], där MAXPOS beror av utbuffertens storlek. Om n<0 sätt den till 0, om
 # n>MAXPOS sätt den till MAXPOS.
-# Parameter: önskad aktuell buffertposition (index), n i texten
+# Parameter: önskad aktuell buffertposition (index), n i texten 
+# Input: rdi = n
 .global setOutPos
 setOutPos:
+    cmpq $0, %rdi
+    je setOutPos_zero
+    cmpq MAXPOS, %rdi
+    je setOutPos_max
+    movq %rdi, output_buffer_pos
+    jmp exit_setOutPos
 
+    setOutPos_zero:
+        movq $0, output_buffer_pos
+        jmp exit_setOutPos
+
+    setOutPos_max:
+        movq $MAXPOS, output_buffer_pos
+        jmp exit_setOutPos
+
+    exit_setOutPos:
+        ret
