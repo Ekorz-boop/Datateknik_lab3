@@ -14,35 +14,18 @@
 .text
 .global main
 main:
-# --------- Inmatning ---------
 
-# --- What we use registers for ---
-
-# rbx = output buffer
-# rcx = output buffer pos
-# rdi = input buffer pos
-# rsi = input buffer
-
-
-
-
-
-# Rutinen ska läsa in en ny textrad från tangentbordet till er inmatningsbuffert för indata
-# och nollställa den aktuella positionen i den. De andra inläsningsrutinerna kommer sedan att
-# jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
-# är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
-# anropas av den rutinen, så att det alltid finns ny data att arbeta med.
 inImage:
     pushq $0
-
-    movq $0, %rax # add call number of sys_read 
-    movq $0, %rdi # load file descriptor for standard input
-    leaq input_buffer, %rsi # Pointer to our input buffer
-    movq $64, %rdx # The size of our input buffer
-    syscall # Returns syscall in input buffer
+    movq $input_buffer, %rdi # arg1
+    movq $64, %rsi # arg2
+    movq stdin, %rdx # arg3
+    call fgets
     
-    movq $0, input_buffer_length # Reset input position
+    movq $0, input_buffer_pos # Reset input buffer position
 
-    # Terminate
-    popq %rax
+    leaq input_buffer(%rip), %rdi
+    call puts
+
+    # Terminate inImage
     ret

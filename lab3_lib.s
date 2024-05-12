@@ -54,14 +54,16 @@ put_into_input_buffer:
 # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
 .global inImage
 inImage:
+    push $0
     movq $input_buffer, %rdi # arg1
-    movq $65,%rsi # arg2
+    movq $64, %rsi # arg2
     movq stdin, %rdx # arg3
     call fgets
     
     movq $0, input_buffer_pos # Reset input buffer position
 
     # Terminate inImage
+    pop %rax
     ret
 
 
