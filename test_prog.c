@@ -4,7 +4,6 @@
 
 #include "my_iolib.h"
 
-
 int main(){
     char headMsg[] = "Start av testprogram. Skriv in 5 tal!";
     char endMsg[] = "Testprogram slut";
@@ -16,8 +15,8 @@ int main(){
     // Lägger inledande text i utmatningsbuffer, 
     // samt skickar innehåll från utmatningsbuffer till terminal.
     // Hämtar sedan text från terminalinmatning.
-    putText(headMsg);   
-    outImage();         
+    // putText(headMsg);   
+    // outImage();    
     inImage();      
 
     // Loop som hämtar 5 tal från inmatningsbuffert, 
