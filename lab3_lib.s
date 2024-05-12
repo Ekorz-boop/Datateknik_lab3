@@ -19,9 +19,10 @@
 # rsi = input buffer
 
 # --- Egna funktioner ---
-
+# OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
 put_into_output_buffer:
     # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
+    pushq $0
     pushq %rbx # Caller owned register, save it
     # Calculate the correct position in the output buffer
     imulq $8, %rcx, %r8 # Multiply the current position with 8 to get the correct position in the buffer
@@ -35,6 +36,7 @@ put_into_output_buffer:
 
 
 put_into_input_buffer:
+    pushq $0
     # rsi = input buffer memory adress, rdi = input buffer pos, al = value to put into input buffer
     # Calculate the correct position in the input buffer
     imulq $8, %rdi, %r8 # Multiply the current position with 8 to get the correct position in the buffer
@@ -63,12 +65,8 @@ inImage:
     movq $0, input_buffer_pos # Reset input buffer position
 
     # Terminate inImage
-    pop %rax
     ret
 
-
-
-    
 
 # Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
 # tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
@@ -104,6 +102,7 @@ getText:
 # Returvärde: inläst tecken
 .global getChar
 getChar:
+    pushq $0
     movq input_buffer_pos, %rdi # Get the current position of the input buffer
     leaq input_buffer, %rsi # Get the input buffer memory adress
 
@@ -130,6 +129,7 @@ getChar:
         incq %rdi # Increment the position
 
     exit_getChar:
+        # Terminate getChar
         ret
 
 
@@ -147,6 +147,7 @@ setInPos:                         # Return from the routine
 # att man får en tömd utbuffert att jobba mot.
 .global outImage
 outImage:
+    push $0
     # Move value fo outbuffer to rbx
     movq $output_buffer, %rdi
     call puts
@@ -160,6 +161,7 @@ outImage:
 # Param: eax = int that should be put into the output buffer
 .global putInt
 putInt:
+    push $0
     pushq %rbx # Caller owned register, save it
     # Move the current outoput position into rcx
     movq output_buffer_pos, %rcx
@@ -206,6 +208,7 @@ putText:
 # Parameter: tecknet som ska läggas i utbufferten (c i texten)
 .global putChar
 putChar:
+    pushq $0
     pushq %rbx # Caller owned register, save it
     call getChar # Get character c from input buffer
     # Check if the output buffer is full
