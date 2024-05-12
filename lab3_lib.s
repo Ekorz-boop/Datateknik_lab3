@@ -7,34 +7,19 @@
 # sker.
 .data
     input_buffer: .space 64 
-    output_buffer: .space 64
-    input_buffer_length: .space 8
-    output_buffer_length: .space 8
+    output_buffer: .space 64 
+    input_buffer_pos: .space 8
+    output_buffer_pos: .space 8
 
 .text
-.global main
-# --------- Inmatning ---------
 
 # --- What we use registers for ---
+# rbx = output buffer
+# rcx = output buffer pos
+# rdi = input buffer pos
+# rsi = input buffer
 
-# rcx = output buffer stuff
-# 
-# rdi = input buffer stuff
-# 
-# 
-#
-#
-#
-#
-#
-
-
-# change_position:
-#     incq %rcx
-#     incq %rdi 
-#     movb %rdi, %bl 
-#     ret
-
+# --------- Inmatning ---------
 # Rutinen ska läsa in en ny textrad från tangentbordet till er inmatningsbuffert för indata
 # och nollställa den aktuella positionen i den. De andra inläsningsrutinerna kommer sedan att
 # jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
@@ -42,39 +27,19 @@
 # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
 .global inImage
 inImage:
-    pushq $0 # 16 bytes aligned
-    movq $0, %rdi # Reset input position
+    pushq $0
 
     movq $0, %rax # add call number of sys_read 
     movq $0, %rdi # load file descriptor for standard input
-    movq input_buffer, %rsi # Pointer to our input buffer
+    leaq input_buffer, %rsi # Pointer to our input buffer (data will be stored here)
     movq $64, %rdx # The size of our input buffer
+    syscall # Make system call. Also returns amount of bytes read in rax.
+    
+    movq $0, input_buffer_pos # Reset input buffer position
 
-    syscall # Returns in rax
-    movq rax, (%input_buffer) # Move the answer from syscall to the buffer
-    leaq input_buffer, %rdi # Put the buffer in rdi
-    movq $0, %rax # Reset rax
-    movq $0, %rbx # Reset rbx
-    call pinImage_loop
-
-    # Exit the entire "program"
-    popq %rax 
+    # Terminate
+    popq %rax
     ret
-
-    exit_inImage_loop:
-        leaq input_buffer_length, %rdi # Load input_buffer_length
-        movb %bl, (%rdi) # Move back the current position into the length so we know current length
-        ret # Return
-
-    pinImage_loop:
-        movb (%rdi), %al # Read first 8 bytes of rdi
-        cmpb $0, %al # If we reach zero we are done and can exit
-        je exit_inImage_loop # Go to end loop
-        incq %rdi # Increase input buffer length
-        incb %bl # Increase the position
-        jmp pinImage_loop
-
-
 
 # Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
 # tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
@@ -125,7 +90,26 @@ setInPos:                         # Return from the routine
 # att man får en tömd utbuffert att jobba mot.
 .global outImage
 outImage:
+    pushq $0
+    # Move value fo outbuffer to rbx
+    movq output_buffer, %rbx
 
+
+    call outImage_loop
+
+    # Terminate
+    pop %rax
+    ret
+
+
+
+    outImage_loop:
+        # Read first 8 bits (first symbol) of output buffer
+        movb %rbx, %al 
+
+
+    exit_outImage_loop:
+        ret
 
 # Rutinen ska lägga ut talet n som sträng i utbufferten från och med buffertens aktuella
 # position. Glöm inte att uppdatera aktuell position innan rutinen lämnas.
