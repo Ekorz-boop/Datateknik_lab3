@@ -87,12 +87,15 @@ getInt:
     xorq %rax, %rax  # Clear %rax to store the result
     movq $1, %r8  # Set %r8 to 1, it will be used to handle negative numbers
 
+    # Check if empty input_buffer
+    cmpq $0, %rdi
+    je getInt_call_inImage
+    # Check if at last place in input_buffer
+    cmpq $MAXPOS, %rdi
+    je getInt_call_inImage
+
     getInt_loop:
         movb (%rsi), %al # Move first char from input buffer into al
-
-        # Check for end of buffer
-        cmpb $0, %al
-        je end_of_buffer
 
         # Check for whitespace
         cmpb $' ', %al
@@ -108,10 +111,12 @@ getInt:
 
         # Check if the character is a digit
         cmpb $'0', %al
-        jl not_digit
+        jl not_integer
         cmpb $'9', %al
-        jg not_digit
+        jg not_integer
 
+
+        # Kommer skriva över sig själv
         # Convert the ASCII character to a digit and add it to the result
         subb $'0', %al
         imulq $10, %rax
@@ -122,7 +127,7 @@ getInt:
         movq $-1, %r8
         jmp next_character
 
-    not_digit:
+    not_integer:
         imulq %r8, %rax  # Apply the sign to the result
         jmp exit_getInt_loop
 
@@ -138,6 +143,10 @@ getInt:
     exit_getInt_loop:
         movq %rdi, input_buffer_pos # Update input buffer position
         ret
+
+    getInt_call_inImage:
+        call inImage
+        jmp getInt_loop
 
     
 # Rutinen ska överföra maximalt n tecken från aktuell position i inbufferten och framåt till
@@ -166,7 +175,7 @@ getText:
 
     # Check if the input buffer is at the end. If it is we need to refill input buffer
     cmpq $MAXPOS, %rdi
-    je getText_call_inImage
+    jge getText_call_inImage
 
     getText_loop:
         # Check if we have read the maximum number of characters
@@ -174,6 +183,9 @@ getText:
         je exit_getText_loop  # If we have, we are done
         # Read first character from the input buffer into al
         movb (%rsi), %al
+        # Check if the character is null
+        cmpb $0, %al
+        je exit_getText_loop  # If it is, we are done
         incq %rdi  # Increment the input buffer position
         incq %rsi  # Increment the input buffer memory adress
         # Write the character to the destination buffer
@@ -209,29 +221,22 @@ getChar:
     movq input_buffer_pos, %rdi # Get the current position of the input buffer
     leaq input_buffer, %rsi # Get the input buffer memory adress
 
-    cmpq $0, %rdi  # 
-    je getChar_call_inImage1 # If we have an empty buffer, call inImage to get new characters
-
-    getChar_part1: # Just to find back after calling inimage
-
-    # Calculate memory adress
-    addq %rdi, %rsi # Add pos onto adress to get current adress
-    movb (%rsi), %al # Get that char
-
     cmpq $MAXPOS, %rdi # Check if we are at max pos
-    je getChar_call_inImage2 # If we reached the end of buffer, call inImage to get new characters
+    je getChar_call_inImage # If we reached the end of buffer, call inImage to get new characters
+
+    cmpq $0, %rdi  # If pos is zero its empty
+    je getChar_call_inImage # If we have an empty buffer, call inImage to get new characters
 
     getChar_part2: # Just to find back after calling inimage
+
+    addq %rdi, %rsi # Add pos onto adress to get current adress
+    movb (%rsi), %al # Get that char
 
     cmpq $0, %rdi  # Check if input pos is zero, since this means we did inImage and thus shouldnt increment
     jne increment_pos # If its not at the first pos we should increment
     jmp exit_getChar
 
-    getChar_call_inImage1:
-        call inImage
-        jmp getChar_part1
-
-    getChar_call_inImage2:
+    getChar_call_inImage:
         call inImage
         jmp getChar_part2
 
@@ -240,6 +245,7 @@ getChar:
 
     exit_getChar:
         # Terminate getChar
+        movq %rdi, input_buffer_pos # Update input buffer position
         ret
 
 
@@ -247,6 +253,7 @@ getChar:
 # [0,MAXPOS], där MAXPOS beror av buffertens faktiska storlek. Om n<0, sätt positionen
 # till 0, om n>MAXPOS, sätt den till MAXPOS.
 # Parameter: önskad aktuell buffertposition (index), n i texten.
+# input: rdi = n
 .global setInPos
 setInPos:
     cmpq $0, %rdi
@@ -294,7 +301,6 @@ putInt:
     movq output_buffer_pos, %rcx  # Move the current outoput position into rcx
     leaq output_buffer, %rbx # Load output buffer into rbx
     
-    
     # Initialize reverse_buffer stuff
     leaq reverse_int_buffer, %r8
     movq reverse_int_buffer_pos, %r9
@@ -306,16 +312,23 @@ putInt:
         je copy_reverse_loop
         
         # Get the least significant digit of the number
-        movq $10, %rax
+        # Remainder in rdx
+        # Quotient in rax
+        # Put rdi in rax
+        movq %rdi, %rax
+        movq $10, %r10
         xorq %rdx, %rdx
-        divq %rax
+        divq %r10
 
-        # Convert the digit to ASCII and put it into reverse_buffer
+        # Convert the digit to ASCII and put it into correct pos in reverse_buffer
         addb $48, %dl
-        movb %dl, reverse_buffer(%r9)
+        movb %dl, (%r8, %r9, 1)
 
         # Increment the reverse buffer position
         incq %r9
+
+        # Update %rdi with the quotient of the division
+        movq %rax, %rdi
 
         # Continue loop with the next digit
         jmp convert_int_loop
@@ -325,9 +338,18 @@ putInt:
         cmpq $0, %r9
         je exit_putInt
 
-        
+        # Copy the character from reverse_buffer to output_buffer
+        movb reverse_int_buffer(%rcx), %bl
+        movb %bl, %al
+        call put_into_output_buffer
 
+        # Decrement reverse_buffer_pos
+        decq %r9
+        # Increment output_buffer_pos
+        incq %rcx
 
+        # Continue with the next character
+        jmp copy_reverse_loop
 
     exit_putInt:
         movq %rcx, output_buffer_pos # Update output buffer position
@@ -345,7 +367,8 @@ putInt:
 putText:
     leaq output_buffer, %rbx
     movq output_buffer_pos, %rcx
-    jmp putText_loop
+
+    # Check if the output buffer is full
 
     putText_loop:
         # Get first 8 bits of the string
@@ -358,7 +381,8 @@ putText:
         call put_into_output_buffer
         # Increment position (check so we don't go out of bounds first)
         cmpq $64, %rcx
-        je outImage
+        je putText_outImage
+        part2:
         inc %rdi
         inc %rcx
         jmp putText_loop
@@ -367,6 +391,10 @@ putText:
         movq %rcx, output_buffer_pos
         ret
 
+    putText_outImage:
+        call outImage
+        jmp part2
+
 
 
 
@@ -374,7 +402,7 @@ putText:
 # Om bufferten blir full när getChar anropas ska ett anrop till outImage göras, så att man
 # får en tömd utbuffert att jobba vidare mot.
 # Parameter: tecknet som ska läggas i utbufferten (c i texten)
-# input: rsi = c
+# input: rdi = c
 .global putChar
 putChar:
     pushq %rbx # Caller owned register, save it
@@ -383,13 +411,21 @@ putChar:
     leaq output_buffer, %rbx
     movq output_buffer_pos, %rcx
     cmpq $MAXPOS, %rcx
-    je outImage # If the output buffer is full, call outImage to empty it
+    je putChar_outImage # If the output buffer is full, call outImage to empty it
     # Move the character to the output buffer
     call put_into_output_buffer
     # Increment the output buffer position
     inc %rcx
 
+    putChar_outImage:
+        call outImage
+        # Move the character to the output buffer
+        call put_into_output_buffer
+        # Increment the output buffer position
+        inc %rcx
+
     # Terminate putChar
+    movq %rcx, output_buffer_pos # Update output buffer position
     popq %rbx
     ret
 
@@ -402,18 +438,19 @@ getOutPos:
     ret
 
 
-# Rutinen ska sätta aktuell buffertposition för utbufferten till n. n måste dock ligga i intervallet
-# [0,MAXPOS], där MAXPOS beror av utbuffertens storlek. Om n<0 sätt den till 0, om
-# n>MAXPOS sätt den till MAXPOS.
-# Parameter: önskad aktuell buffertposition (index), n i texten 
-# Input: rdi = n
+
 .global setOutPos
 setOutPos:
-    cmpq $0, %rdi
+    # Rutinen ska sätta aktuell buffertposition för utbufferten till n. n måste dock ligga i intervallet
+    # [0,MAXPOS], där MAXPOS beror av utbuffertens storlek. Om n<0 sätt den till 0, om
+    # n>MAXPOS sätt den till MAXPOS.
+    # Parameter: önskad aktuell buffertposition (index), n i texten 
+    # Input: rdi = n
+    cmpb $0, %dil
     je setOutPos_zero
-    cmpq MAXPOS, %rdi
+    cmpb $MAXPOS, %dil
     je setOutPos_max
-    movq %rdi, output_buffer_pos
+    movb %dil, output_buffer_pos
     jmp exit_setOutPos
 
     setOutPos_zero:

@@ -10,22 +10,40 @@
     output_buffer: .space 64 
     input_buffer_pos: .space 8
     output_buffer_pos: .space 8
+    reverse_int_buffer: .space 64
+    reverse_int_buffer_pos: .space 8
+    .equ MAXPOS, 64
 
 .text
-.global main
-main:
+# --- What we use registers for ---
+# rbx = output buffer
+# rcx = output buffer pos
+# rdi = input buffer pos
+# rsi = input buffer
 
-inImage:
-    pushq $0
-    movq $input_buffer, %rdi # arg1
-    movq $64, %rsi # arg2
-    movq stdin, %rdx # arg3
-    call fgets
-    
-    movq $0, input_buffer_pos # Reset input buffer position
+# --- Egna funktioner ---
+# OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
+put_into_output_buffer:
+    # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
+    pushq %rbx # Caller owned register, save it
+    # Calculate the correct position in the output buffer
+    addq %rcx, %rbx # Add the position to the buffer to get the correct position
+    # Put the value into the output buffer
+    movb %al, (%rbx)
 
-    leaq input_buffer(%rip), %rdi
-    call puts
-
-    # Terminate inImage
+    # Terminate put_into_output_buffer
+    pop %rbx
     ret
+
+
+put_into_input_buffer:
+    # rsi = input buffer memory adress, rdi = input buffer pos, al = value to put into input buffer
+    # Calculate the correct position in the input buffer
+    addq %rdi, %rsi # Add the position to the buffer to get the correct position
+    # Put the value into the input buffer
+    movb %al, (%rsi)
+
+    # Terminate put_into_input_buffer
+    ret
+
+
