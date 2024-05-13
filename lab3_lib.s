@@ -10,6 +10,8 @@
     output_buffer: .space 64 
     input_buffer_pos: .space 8
     output_buffer_pos: .space 8
+    reverse_int_buffer: .space 64
+    reverse_int_buffer_pos: .space 8
     .equ MAXPOS, 64
 
 .text
@@ -291,25 +293,43 @@ putInt:
     pushq %rbx # Caller owned register, save it
     movq output_buffer_pos, %rcx  # Move the current outoput position into rcx
     leaq output_buffer, %rbx # Load output buffer into rbx
+    
+    
+    # Initialize reverse_buffer stuff
+    leaq reverse_int_buffer, %r8
+    movq reverse_int_buffer_pos, %r9
+    movq $0, %r9 # Reset reverse buffer pos
 
-    putInt_loop:
+    convert_int_loop:
         # Check if the number is 0, if it is we are done
         cmpq $0, %rdi
-        je exit_putInt_loop
+        je copy_reverse_loop
+        
         # Get the least significant digit of the number
         movq $10, %rax
         xorq %rdx, %rdx
         divq %rax
-        # Convert the digit to ASCII and put it into the output buffer
-        addb $48, %al
-        # Check if the output buffer is full before putting the value in
-        cmpq $64, %rcx
-        je outImage
-        call put_into_output_buffer
-        incq %rcx # Increment the position
-        jmp putInt_loop
 
-    exit_putInt_loop:
+        # Convert the digit to ASCII and put it into reverse_buffer
+        addb $48, %dl
+        movb %dl, reverse_buffer(%r9)
+
+        # Increment the reverse buffer position
+        incq %r9
+
+        # Continue loop with the next digit
+        jmp convert_int_loop
+
+    copy_reverse_loop:
+        # Check if reverse buffer is empty
+        cmpq $0, %r9
+        je exit_putInt
+
+        
+
+
+
+    exit_putInt:
         movq %rcx, output_buffer_pos # Update output buffer position
         popq %rbx
         ret
