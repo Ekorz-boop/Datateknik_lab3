@@ -14,6 +14,10 @@
     reverse_int_buffer_pos: .space 8
     .equ MAXPOS, 64
 
+# OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
+# Checked functions: setInPos, setOutPos, getOutPos, outImage
+# Unchecked functions: inImage, getInt, getText, getChar, putInt, putText, putChar
+
 .text
 # --- What we use registers for ---
 # rbx = output buffer
@@ -22,7 +26,7 @@
 # rsi = input buffer
 
 # --- Egna funktioner ---
-# OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
+
 put_into_output_buffer:
     # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
     pushq %rbx # Caller owned register, save it
@@ -48,13 +52,14 @@ put_into_input_buffer:
 
 
 # --------- Inmatning ---------
-# Rutinen ska läsa in en ny textrad från tangentbordet till er inmatningsbuffert för indata
-# och nollställa den aktuella positionen i den. De andra inläsningsrutinerna kommer sedan att
-# jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
-# är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
-# anropas av den rutinen, så att det alltid finns ny data att arbeta med.
+
 .global inImage
 inImage:
+    # Rutinen ska läsa in en ny textrad från tangentbordet till er inmatningsbuffert för indata
+    # och nollställa den aktuella positionen i den. De andra inläsningsrutinerna kommer sedan att
+    # jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
+    # är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
+    # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
     pushq $0 # Uses external function call
     movq $input_buffer, %rdi # arg1 for fgets
     movq $MAXPOS, %rsi # arg2 for fgets
@@ -68,18 +73,18 @@ inImage:
     ret
 
 
-# Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
-# tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
-# heltalsformat och returneras. Positionen i bufferten ska vara det första tecken som inte
-# ingick i det lästa talet när rutinen lämnas. Inledande blanktecken i talet ska vara tillåtna.
-# Ett plustecken eller ett minustecken ska kunna inleda talet och vara direkt följt av en eller
-# flera heltalssiffror. Ett tal utan inledande plus eller minus ska alltid tolkas som positivt.
-# Om inmatningsbufferten är tom eller om den aktuella positionen i inmatningsbufferten
-# är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
-# returnerar värdet av ett inmatat tal.
-# Returvärde: inläst heltal
 .global getInt
 getInt:
+    # Rutinen ska tolka en sträng som börjar på aktuell buffertposition i inbufferten och fortsätta
+    # tills ett tecken som inte kan ingå i ett heltal påträffas. Den lästa substrängen översätts till
+    # heltalsformat och returneras. Positionen i bufferten ska vara det första tecken som inte
+    # ingick i det lästa talet när rutinen lämnas. Inledande blanktecken i talet ska vara tillåtna.
+    # Ett plustecken eller ett minustecken ska kunna inleda talet och vara direkt följt av en eller
+    # flera heltalssiffror. Ett tal utan inledande plus eller minus ska alltid tolkas som positivt.
+    # Om inmatningsbufferten är tom eller om den aktuella positionen i inmatningsbufferten
+    # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
+    # returnerar värdet av ett inmatat tal.
+    # Returvärde: inläst heltal
     # Load input buffer and get the position
     movq input_buffer_pos, %rdi # Get the current position of the input buffer
     leaq input_buffer, %rsi # Get the input buffer memory address
@@ -148,21 +153,21 @@ getInt:
         call inImage
         jmp getInt_loop
 
-    
-# Rutinen ska överföra maximalt n tecken från aktuell position i inbufferten och framåt till
-# minnesplats med början vid buf. När rutinen lämnas ska aktuell position i inbufferten vara
-# första tecknet efter den överförda strängen. Om det inte finns n st. tecken kvar i inbufferten
-# avbryts överföringen vid slutet av bufferten. Returnera antalet verkligt överförda tecken.
-# Om inmatningsbufferten är tom eller aktuell position i den är vid buffertens slut vid anrop
-# av getText ska getText kalla på inImage, så att getText alltid läser över någon sträng
-# till minnesutrymmet sombuf pekar till. Kom ihåg att en sträng per definition är NULLterminerad.
-# Parameter 1: adress till minnesutrymme att kopiera sträng till från inmatningsbufferten
-# (buf i texten)
-# Parameter 2: maximalt antal tecken att läsa från inmatningsbufferten (n i texten)
-# Returvärde: antal överförda tecken
-# Input: rsi = n, %rdi = buffert to move to
+
 .global getText
 getText:
+    # Rutinen ska överföra maximalt n tecken från aktuell position i inbufferten och framåt till
+    # minnesplats med början vid buf. När rutinen lämnas ska aktuell position i inbufferten vara
+    # första tecknet efter den överförda strängen. Om det inte finns n st. tecken kvar i inbufferten
+    # avbryts överföringen vid slutet av bufferten. Returnera antalet verkligt överförda tecken.
+    # Om inmatningsbufferten är tom eller aktuell position i den är vid buffertens slut vid anrop
+    # av getText ska getText kalla på inImage, så att getText alltid läser över någon sträng
+    # till minnesutrymmet sombuf pekar till. Kom ihåg att en sträng per definition är NULLterminerad.
+    # Parameter 1: adress till minnesutrymme att kopiera sträng till från inmatningsbufferten
+    # (buf i texten)
+    # Parameter 2: maximalt antal tecken att läsa från inmatningsbufferten (n i texten)
+    # Returvärde: antal överförda tecken
+    # Input: rsi = n, %rdi = buffert to move to
     # Save the inputs to r9 and r10
     movq %rdi, %r9  # Save the destination buffer address
     movq %rsi, %r10  # Save the maximum number of characters to read
@@ -210,14 +215,15 @@ getText:
         # Calculate and return the num of chars read
         ret
 
-# Rutinen ska returnera ett tecken från inmatningsbuffertens aktuella position och flytta
-# fram aktuell position ett steg i inmatningsbufferten ett steg. Om inmatningsbufferten är
-# tom eller aktuell position i den är vid buffertens slut vid anrop av getChar ska getChar
-# kalla på inImage, så att getChar alltid returnerar ett tecken ur inmatningsbufferten.
-# Returvärde: inläst tecken
-# output: rax = inläst tecken
+
 .global getChar
 getChar:
+    # Rutinen ska returnera ett tecken från inmatningsbuffertens aktuella position och flytta
+    # fram aktuell position ett steg i inmatningsbufferten ett steg. Om inmatningsbufferten är
+    # tom eller aktuell position i den är vid buffertens slut vid anrop av getChar ska getChar
+    # kalla på inImage, så att getChar alltid returnerar ett tecken ur inmatningsbufferten.
+    # Returvärde: inläst tecken
+    # output: rax = inläst tecken
     movq input_buffer_pos, %rdi # Get the current position of the input buffer
     leaq input_buffer, %rsi # Get the input buffer memory adress
 
@@ -249,18 +255,18 @@ getChar:
         ret
 
 
-# Rutinen ska sätta aktuell buffertposition för inbufferten till n. n måste dock ligga i intervallet
-# [0,MAXPOS], där MAXPOS beror av buffertens faktiska storlek. Om n<0, sätt positionen
-# till 0, om n>MAXPOS, sätt den till MAXPOS.
-# Parameter: önskad aktuell buffertposition (index), n i texten.
-# input: rdi = n
 .global setInPos
 setInPos:
-    cmpq $0, %rdi
+    # Rutinen ska sätta aktuell buffertposition för inbufferten till n. n måste dock ligga i intervallet
+    # [0,MAXPOS], där MAXPOS beror av buffertens faktiska storlek. Om n<0, sätt positionen
+    # till 0, om n>MAXPOS, sätt den till MAXPOS.
+    # Parameter: önskad aktuell buffertposition (index), n i texten.
+    # input: rdi = n
+    cmpb $0, %dil
     je setInPos_zero
-    cmpq MAXPOS, %rdi
+    cmpb MAXPOS, %dil
     je setInPos_max
-    movq %rdi, input_buffer_pos
+    movb %dil, input_buffer_pos
     jmp exit_setInPos
 
     setInPos_zero:
@@ -274,13 +280,14 @@ setInPos:
     exit_setInPos:
         ret
 
+
 # --------- Utmatning ---------
 
-# Rutinen ska skriva ut strängen som ligger i utbufferten i terminalen. Om någon av de
-# övriga utdatarutinerna når buffertens slut, så ska ett anrop till outImage göras i dem, så
-# att man får en tömd utbuffert att jobba mot.
 .global outImage
 outImage:
+    # Rutinen ska skriva ut strängen som ligger i utbufferten i terminalen. Om någon av de
+    # övriga utdatarutinerna når buffertens slut, så ska ett anrop till outImage göras i dem, så
+    # att man får en tömd utbuffert att jobba mot.
     push $0 # Uses external function call
     # Move value fo outbuffer to rbx
     movq $output_buffer, %rdi
@@ -291,12 +298,13 @@ outImage:
     popq %rax
     ret
 
-# Rutinen ska lägga ut talet n som sträng i utbufferten från och med buffertens aktuella
-# position. Glöm inte att uppdatera aktuell position innan rutinen lämnas.
-# Parameter: tal som ska läggas in i bufferten (n i texten)
-# input: rdi = int
+
 .global putInt
 putInt:
+    # Rutinen ska lägga ut talet n som sträng i utbufferten från och med buffertens aktuella
+    # position. Glöm inte att uppdatera aktuell position innan rutinen lämnas.
+    # Parameter: tal som ska läggas in i bufferten (n i texten)
+    # input: rdi = int
     pushq %rbx # Caller owned register, save it
     movq output_buffer_pos, %rcx  # Move the current outoput position into rcx
     leaq output_buffer, %rbx # Load output buffer into rbx
@@ -357,14 +365,14 @@ putInt:
         ret
 
 
-# Rutinen ska lägga textsträngen som finns i buf från och med den aktuella positionen i
-# utbufferten. Glöm inte att uppdatera utbuffertens aktuella position innan rutinen lämnas.
-# Om bufferten blir full så ska ett anrop till outImage göras, så att man får en tömd utbuffert
-# att jobba vidare mot.
-# Parameter: adress som strängen ska hämtas till utbufferten ifrån (buf i texten)
-# Input: rdi = buf
 .global putText
 putText:
+    # Rutinen ska lägga textsträngen som finns i buf från och med den aktuella positionen i
+    # utbufferten. Glöm inte att uppdatera utbuffertens aktuella position innan rutinen lämnas.
+    # Om bufferten blir full så ska ett anrop till outImage göras, så att man får en tömd utbuffert
+    # att jobba vidare mot.
+    # Parameter: adress som strängen ska hämtas till utbufferten ifrån (buf i texten)
+    # Input: rdi = buf
     leaq output_buffer, %rbx
     movq output_buffer_pos, %rcx
 
@@ -396,15 +404,13 @@ putText:
         jmp part2
 
 
-
-
-# Rutinen ska lägga tecknet c i utbufferten och flytta fram aktuell position i den ett steg.
-# Om bufferten blir full när getChar anropas ska ett anrop till outImage göras, så att man
-# får en tömd utbuffert att jobba vidare mot.
-# Parameter: tecknet som ska läggas i utbufferten (c i texten)
-# input: rdi = c
 .global putChar
 putChar:
+    # Rutinen ska lägga tecknet c i utbufferten och flytta fram aktuell position i den ett steg.
+    # Om bufferten blir full när getChar anropas ska ett anrop till outImage göras, så att man
+    # får en tömd utbuffert att jobba vidare mot.
+    # Parameter: tecknet som ska läggas i utbufferten (c i texten)
+    # input: rdi = c
     pushq %rbx # Caller owned register, save it
     call getChar # Get character c from input buffer
     # Check if the output buffer is full
@@ -430,13 +436,12 @@ putChar:
     ret
 
 
-# Rutinen ska returnera aktuell buffertposition för utbufferten.
-# Returvärde: aktuell buffertposition (index)
 .global getOutPos
 getOutPos:
+    # Rutinen ska returnera aktuell buffertposition för utbufferten.
+    # Returvärde: aktuell buffertposition (index)
     movq output_buffer_pos, %rax
     ret
-
 
 
 .global setOutPos
