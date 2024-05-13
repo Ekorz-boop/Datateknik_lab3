@@ -15,8 +15,8 @@
     .equ MAXPOS, 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
-# Checked functions: setInPos, setOutPos, getOutPos, outImage
-# Unchecked functions: inImage, getInt, getText, getChar, putInt, putText, putChar
+# Checked functions: setInPos, setOutPos, getOutPos, outImage, inImage
+# Unchecked functions: getInt, getText, getChar, putInt, putText, putChar
 
 .text
 # --- What we use registers for ---
@@ -61,9 +61,9 @@ inImage:
     # är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
     # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
     pushq $0 # Uses external function call
-    movq $input_buffer, %rdi # arg1 for fgets
-    movq $MAXPOS, %rsi # arg2 for fgets
-    movq stdin, %rdx # arg3 for fgets
+    movq $input_buffer, %rdi # arg1 for fgets. The buffer where fgets puts the input
+    movq $MAXPOS, %rsi # arg2 for fgets. How many bytes it can read
+    movq stdin, %rdx # arg3 for fgets. From standard input
     call fgets
     
     movq $0, input_buffer_pos # Reset input buffer position
@@ -288,12 +288,12 @@ outImage:
     # Rutinen ska skriva ut strängen som ligger i utbufferten i terminalen. Om någon av de
     # övriga utdatarutinerna når buffertens slut, så ska ett anrop till outImage göras i dem, så
     # att man får en tömd utbuffert att jobba mot.
-    push $0 # Uses external function call
-    # Move value fo outbuffer to rbx
-    movq $output_buffer, %rdi
-    call puts
-    # Reset position
-    movq $0, output_buffer_pos
+    push $0 # Uses external function call so fix stack alignment
+
+    movq $output_buffer, %rdi # Move value of outbuffer to rdi
+    call puts # Puts prints buffer in rdi to terminal
+    movq $0, output_buffer_pos # Reset output buffer position
+    
     # Terminate outImage
     popq %rax
     ret
@@ -376,32 +376,36 @@ putText:
     leaq output_buffer, %rbx
     movq output_buffer_pos, %rcx
 
-    # Check if the output buffer is full
+    # Check if the output buffer is full from the beginning
+    cmpq $MAXPOS, %rcx # Check if the output buffer is full
+    jne putText_loop # If it's not full, continue with the loop
+    call outImage # If it's full, call outImage to empty the output buffer
+    movq output_buffer_pos, %rcx # If we did outImage, we need to update the output buffer position
 
     putText_loop:
-        # Get first 8 bits of the string
-        movb (%rdi), %al
-        # Check if it's 0, if it is we are done
-        cmpb $0, %al
+        movb (%rdi), %al # Get first 8 bits of the string
+        cmpb $0, %al # Check if it's 0, if it is we are done
         je exit_putText_loop
+        
         # Move the first 8 bits of n into the output buffer at the current position
         # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
         call put_into_output_buffer
-        # Increment position (check so we don't go out of bounds first)
-        cmpq $64, %rcx
-        je putText_outImage
-        part2:
-        inc %rdi
-        inc %rcx
-        jmp putText_loop
+        
+        cmpq $MAXPOS, %rcx # Check if the output buffer is full
+        je putText_outImage 
+        continue_after_putText_outImage:
+        inc %rdi # Move to the next character in the string
+        inc %rcx # Increment the output buffer position
+        jmp putText_loop # Continue with the next character
 
     exit_putText_loop:
-        movq %rcx, output_buffer_pos
+        movq %rcx, output_buffer_pos # Update output buffer position
         ret
 
     putText_outImage:
         call outImage
-        jmp part2
+        movq output_buffer_pos, %rcx # If we did outImage, we need to update the output buffer position
+        jmp continue_after_putText_outImage
 
 
 .global putChar
@@ -413,27 +417,28 @@ putChar:
     # input: rdi = c
     pushq %rbx # Caller owned register, save it
     call getChar # Get character c from input buffer
-    # Check if the output buffer is full
-    leaq output_buffer, %rbx
-    movq output_buffer_pos, %rcx
-    cmpq $MAXPOS, %rcx
+    
+    leaq output_buffer, %rbx # Load output buffer into rbx
+    movq output_buffer_pos, %rcx # Get the current position of the output buffer
+
+    cmpq $MAXPOS, %rcx # Check if the output buffer is full
     je putChar_outImage # If the output buffer is full, call outImage to empty it
-    # Move the character to the output buffer
-    call put_into_output_buffer
-    # Increment the output buffer position
-    inc %rcx
+    
+    call put_into_output_buffer # Move the character to the output buffer
+    inc %rcx # Increment the output buffer position
+    jmp exit_putChar # Done, let's exit
 
     putChar_outImage:
-        call outImage
-        # Move the character to the output buffer
-        call put_into_output_buffer
-        # Increment the output buffer position
-        inc %rcx
+        call outImage # Call outImage to empty the output buffer
+        movq output_buffer_pos, %rcx # If we did outImage we must update the output buffer position
+        call put_into_output_buffer # Move the character to the output buffer
+        inc %rcx # Increment the output buffer position
 
-    # Terminate putChar
-    movq %rcx, output_buffer_pos # Update output buffer position
-    popq %rbx
-    ret
+    exit_putChar:
+        # Terminate putChar
+        movq %rcx, output_buffer_pos # Update output buffer position
+        popq %rbx # Restore caller owned register
+        ret
 
 
 .global getOutPos
