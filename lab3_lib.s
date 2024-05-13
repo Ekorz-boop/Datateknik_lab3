@@ -54,9 +54,9 @@ put_into_input_buffer:
 .global inImage
 inImage:
     pushq $0 # Uses external function call
-    movq $input_buffer, %rdi # arg1
-    movq $MAXPOS, %rsi # arg2
-    movq stdin, %rdx # arg3
+    movq $input_buffer, %rdi # arg1 for fgets
+    movq $MAXPOS, %rsi # arg2 for fgets
+    movq stdin, %rdx # arg3 for fgets
     call fgets
     
     movq $0, input_buffer_pos # Reset input buffer position
@@ -78,15 +78,64 @@ inImage:
 # Returvärde: inläst heltal
 .global getInt
 getInt:
-    
+    # Load input buffer and get the position
+    movq input_buffer_pos, %rdi # Get the current position of the input buffer
+    leaq input_buffer, %rsi # Get the input buffer memory address
 
+    xorq %rax, %rax  # Clear %rax to store the result
+    movq $1, %r8  # Set %r8 to 1, it will be used to handle negative numbers
 
     getInt_loop:
+        movb (%rsi), %al # Move first char from input buffer into al
 
+        # Check for end of buffer
+        cmpb $0, %al
+        je end_of_buffer
+
+        # Check for whitespace
+        cmpb $' ', %al
+        je next_character
+
+        # Check for minus sign
+        cmpb $'-', %al
+        je handle_minus
+
+        # Check for plus sign
+        cmpb $'+', %al
+        je next_character
+
+        # Check if the character is a digit
+        cmpb $'0', %al
+        jl not_digit
+        cmpb $'9', %al
+        jg not_digit
+
+        # Convert the ASCII character to a digit and add it to the result
+        subb $'0', %al
+        imulq $10, %rax
+        addq %rax, %rax
+        jmp next_character
+
+    handle_minus:
+        movq $-1, %r8
+        jmp next_character
+
+    not_digit:
+        imulq %r8, %rax  # Apply the sign to the result
+        jmp exit_getInt_loop
+
+    next_character:
+        incq %rdi
+        incq %rsi
+        jmp getInt_loop
+
+    end_of_buffer:
+        call inImage
+        jmp getInt_loop
 
     exit_getInt_loop:
-
-
+        movq %rdi, input_buffer_pos # Update input buffer position
+        ret
 
     
 # Rutinen ska överföra maximalt n tecken från aktuell position i inbufferten och framåt till
@@ -248,9 +297,9 @@ putInt:
         cmpq $0, %rdi
         je exit_putInt_loop
         # Get the least significant digit of the number
-        movq $10, %r8 # Move 10 into r8
-        xorq %rax, %rax # Clear rax
-        divq %r8 # Divide rdx:rax by r8, result in rax, remainder in rdx
+        movq $10, %rax
+        xorq %rdx, %rdx
+        divq %rax
         # Convert the digit to ASCII and put it into the output buffer
         addb $48, %al
         # Check if the output buffer is full before putting the value in
