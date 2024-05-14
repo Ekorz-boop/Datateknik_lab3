@@ -92,61 +92,40 @@ getInt:
     # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
-
-    # Check if empty input_buffer or at last place in input_buffer
+    pushq $0 # Stack alignment thing
+    
     call get_current_input_buffer_value
-    cmpb $0, %al
+    cmpb $0, %al # Check if empty input_buffer
     je getInt_call_inImage
-    cmpb $MAXPOS, %al
+    cmpb $MAXPOS, %al # Check if at last place in input_buffer
     je getInt_call_inImage
-
-    xorq %rax, %rax
-    movq $1, %r8
-
-    getInt_loop:
-        call get_current_input_buffer_value # Returns in al
-
-        cmpb $' ', %al # If whitespace
-        je next_character
-
-        cmpb $'-', %al # If minus sign
-        je handle_minus
-
-        cmpb $'+', %al # If plus sign
-        je next_character
-
-        cmpb $'\n', %al # If new line
-        je next_character
-
-        cmpb $'0', %al
-        jl not_integer
-        cmpb $'9', %al
-        jg not_integer
-
-        subb $'0', %al
-        imulq $10, %rax
-        addq %rax, %rax
-        jmp next_character
-
-    handle_minus:
-        movq $-1, %r8
-        jmp next_character
-
-    not_integer:
-        imulq %r8, %rax
-        jmp exit_getInt_loop
-
-    next_character:
-        incq %rdi
-        incq %rsi
-        jmp getInt_loop
+    jmp after_callinImage
 
     getInt_call_inImage:
         call inImage
-        jmp getInt_loop
 
-    exit_getInt_loop:
-        movq %rdi, input_buffer_pos
+    after_callinImage:
+    
+    movq input_buffer, %rdi
+    
+    call atoi # Returns in eax
+    movslq %eax, %rax # Move with sign extend to rax for output
+    movq %rax, %rdi # Copy the output to rdi so we can increment over it to calc pos
+
+    xorq %rcx, %rcx # Zero rcx and then use it to store length
+    getInt_calc_pos_loop:
+        movb (%rdi), %dl
+        cmpb $0, %dl
+        je exit_getInt_calc_pos_loop
+        incq %rdi
+        incq %rcx
+        jmp getInt_calc_pos_loop
+    
+    exit_getInt_calc_pos_loop:
+        movq input_buffer_pos, %r8 # Get current pos of input buffer
+        addq %r8, %rcx # Add the length of the string to the current pos
+        movq %rcx, input_buffer_pos # Update the input buffer pos to this new pos
+        pop %rax
         ret
 
 
@@ -355,7 +334,7 @@ putText:
     call outImage # If it's full, call outImage to empty the output buffer
 
     putText_loop:
-        movb output_buffer, %al # Get first 8 bits of the string
+        movb (%rdi), %al # Get first 8 bits of the string
         cmpb $0, %al # Check if it's 0, if it is we are done
         je exit_putText_loop
         
@@ -367,8 +346,8 @@ putText:
         cmpb $MAXPOS, %al # Check if the output buffer is full
         je putText_outImage 
         continue_after_putText_outImage:
-        inc %rdi # Move to the next character in the string
-        inc output_buffer_pos # Increment the output buffer position
+        incq %rdi # Move to the next character in the string
+        incq output_buffer_pos # Increment the output buffer position
         jmp putText_loop # Continue with the next character
 
     exit_putText_loop:
@@ -392,13 +371,13 @@ putChar:
     je putChar_outImage # If the output buffer is full, call outImage to empty it
     
     call put_into_output_buffer # Move the character to the output buffer
-    inc output_buffer_pos # Increment the output buffer position
+    incq output_buffer_pos # Increment the output buffer position
     jmp exit_putChar # Done, let's exit
 
     putChar_outImage:
         call outImage # Call outImage to empty the output buffer
         call put_into_output_buffer # Move the character to the output buffer
-        inc output_buffer_pos # Increment the output buffer position
+        incq output_buffer_pos # Increment the output buffer position
 
     exit_putChar:
         # Terminate putChar
