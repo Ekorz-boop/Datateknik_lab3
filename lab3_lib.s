@@ -92,29 +92,30 @@ getInt:
     # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
-    # Load input buffer and get the position
-    movq input_buffer_pos, %rdi
-    leaq input_buffer, %rsi
+
+    # Check if empty input_buffer or at last place in input_buffer
+    call get_current_input_buffer_value
+    cmpb $0, %al
+    je getInt_call_inImage
+    cmpb $MAXPOS, %al
+    je getInt_call_inImage
 
     xorq %rax, %rax
     movq $1, %r8
 
     getInt_loop:
-        # Check if empty input_buffer or at last place in input_buffer
-        cmpq $0, (%rsi)
-        je getInt_call_inImage
-        cmpq $MAXPOS, %rdi
-        je getInt_call_inImage
+        call get_current_input_buffer_value # Returns in al
 
-        movb (%rsi), %al
-
-        cmpb $' ', %al
+        cmpb $' ', %al # If whitespace
         je next_character
 
-        cmpb $'-', %al
+        cmpb $'-', %al # If minus sign
         je handle_minus
 
-        cmpb $'+', %al
+        cmpb $'+', %al # If plus sign
+        je next_character
+
+        cmpb $'\n', %al # If new line
         je next_character
 
         cmpb $'0', %al
@@ -166,50 +167,39 @@ getText:
     # Save the inputs to r9 and r10
     movq %rdi, %r9  # Save the destination buffer address
     movq %rsi, %r10  # Save the maximum number of characters to read
-
-    # Load input buffer and get the position
-    movq input_buffer_pos, %rdi # Get the current position of the input buffer
-    leaq input_buffer, %rsi # Get the input buffer memory adress
-    
-    xorq %rax, %rax  # Set counter to 0
+    xorq %rax, %rax  # Will use rax as counter. Set it to 0
 
     # Check if the input buffer is at the end. If it is we need to refill input buffer
-    cmpq $MAXPOS, %rdi
-    jne getText_loop
-    call inImage
-    movq input_buffer_pos, %rdi # Update input buffer position
+    call get_current_input_buffer_value
+    cmpb $MAXPOS, %al
+    jge getText_call_inImage
+    cmpb $0, %al
+    jle getText_call_inImage
 
     getText_loop:
         # Check if we have read the maximum number of characters
         cmpq %r10, %rax
         je exit_getText_loop  # If we have, we are done
-        # Read first character from the input buffer into al
-        movb (%rsi), %al
+        call get_current_input_buffer_value # Returns in al
         # Check if the character is null
         cmpb $0, %al
         je exit_getText_loop  # If it is, we are done
-        incq %rdi  # Increment the input buffer position
-        incq %rsi  # Increment the input buffer memory adress
+        incq input_buffer_pos # Increment the input buffer position
         # Write the character to the destination buffer
         movb %al, (%r9)
-        incq %r9  # Increment the destination buffer position
+        incq %r9  # Increment the destination buffer adress
         incq %rax  # Increment the counter
-        # Check if we have reached the end of the input buffer
-        cmpq $MAXPOS, %rdi
         je getText_call_inImage  # If we have call inImage
         
         jmp getText_loop
 
     getText_call_inImage:
         call inImage
-        movq input_buffer_pos, %rdi # Update input buffer position
         jmp getText_loop
 
     exit_getText_loop:
         # Null-terminate the string
         movb $0, (%r9)
-        # Update input buffer position
-        movq %rdi, input_buffer_pos
         # Calculate and return the num of chars read
         ret
 
@@ -231,9 +221,11 @@ getChar:
 
     getChar_part2: # Just to find back after calling inimage
 
-    movq $input_buffer, %r8
+    movq $input_buffer, %r8 # Load input buffer adress into r8
     addq input_buffer_pos, %r8 # Add pos onto adress to get current adress
     movb (%r8), %al # Get that char
+
+    incq input_buffer_pos # Increment the input buffer position
 
     # Terminate getChar
     ret
@@ -294,7 +286,7 @@ putInt:
     # Parameter: tal som ska läggas in i bufferten (n i texten)
     # input: rdi = int
     
-    movq $0, reverse_buffer_pos # Reset reverse buffer pos
+    movq $0, reverse_int_buffer_pos # Reset reverse buffer pos
 
     convert_int_loop:
         # Check if the number is 0, if it is we are done
