@@ -15,8 +15,8 @@
     .equ MAXPOS, 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
-# Checked functions: setInPos, setOutPos, getOutPos, outImage, inImage
-# Unchecked functions: getInt, getText, getChar, putInt, putText, putChar
+# Checked functions: setInPos, setOutPos, getOutPos, outImage, inImage, putInt, , putText, putChar
+# Unchecked functions: getInt, getText, getChar
 
 .text
 # --- What we use registers for ---
@@ -86,43 +86,35 @@ getInt:
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
     # Load input buffer and get the position
-    movq input_buffer_pos, %rdi # Get the current position of the input buffer
-    leaq input_buffer, %rsi # Get the input buffer memory address
+    movq input_buffer_pos, %rdi
+    leaq input_buffer, %rsi
 
-    xorq %rax, %rax  # Clear %rax to store the result
-    movq $1, %r8  # Set %r8 to 1, it will be used to handle negative numbers
-
-    # Check if empty input_buffer
-    cmpq $0, %rdi
-    je getInt_call_inImage
-    # Check if at last place in input_buffer
-    cmpq $MAXPOS, %rdi
-    je getInt_call_inImage
+    xorq %rax, %rax
+    movq $1, %r8
 
     getInt_loop:
-        movb (%rsi), %al # Move first char from input buffer into al
+        # Check if empty input_buffer or at last place in input_buffer
+        cmpq $0, (%rsi)
+        je getInt_call_inImage
+        cmpq $MAXPOS, %rdi
+        je getInt_call_inImage
 
-        # Check for whitespace
+        movb (%rsi), %al
+
         cmpb $' ', %al
         je next_character
 
-        # Check for minus sign
         cmpb $'-', %al
         je handle_minus
 
-        # Check for plus sign
         cmpb $'+', %al
         je next_character
 
-        # Check if the character is a digit
         cmpb $'0', %al
         jl not_integer
         cmpb $'9', %al
         jg not_integer
 
-
-        # Kommer skriva över sig själv
-        # Convert the ASCII character to a digit and add it to the result
         subb $'0', %al
         imulq $10, %rax
         addq %rax, %rax
@@ -133,7 +125,7 @@ getInt:
         jmp next_character
 
     not_integer:
-        imulq %r8, %rax  # Apply the sign to the result
+        imulq %r8, %rax
         jmp exit_getInt_loop
 
     next_character:
@@ -141,17 +133,13 @@ getInt:
         incq %rsi
         jmp getInt_loop
 
-    end_of_buffer:
+    getInt_call_inImage:
         call inImage
         jmp getInt_loop
 
     exit_getInt_loop:
-        movq %rdi, input_buffer_pos # Update input buffer position
+        movq %rdi, input_buffer_pos
         ret
-
-    getInt_call_inImage:
-        call inImage
-        jmp getInt_loop
 
 
 .global getText
@@ -180,7 +168,9 @@ getText:
 
     # Check if the input buffer is at the end. If it is we need to refill input buffer
     cmpq $MAXPOS, %rdi
-    jge getText_call_inImage
+    jne getText_loop
+    call inImage
+    movq input_buffer_pos, %rdi # Update input buffer position
 
     getText_loop:
         # Check if we have read the maximum number of characters
@@ -205,6 +195,7 @@ getText:
 
     getText_call_inImage:
         call inImage
+        movq input_buffer_pos, %rdi # Update input buffer position
         jmp getText_loop
 
     exit_getText_loop:
@@ -230,8 +221,8 @@ getChar:
     cmpq $MAXPOS, %rdi # Check if we are at max pos
     je getChar_call_inImage # If we reached the end of buffer, call inImage to get new characters
 
-    cmpq $0, %rdi  # If pos is zero its empty
-    je getChar_call_inImage # If we have an empty buffer, call inImage to get new characters
+    cmpb $0, input_buffer(%rip) # Check if first byte in buffer is zero (empty)
+    je getChar_call_inImage  # If the value in al is 0, jump to getChar_call_inImage
 
     getChar_part2: # Just to find back after calling inimage
 
@@ -244,6 +235,7 @@ getChar:
 
     getChar_call_inImage:
         call inImage
+        movq input_buffer_pos, %rdi # Update input buffer position
         jmp getChar_part2
 
     increment_pos: 
