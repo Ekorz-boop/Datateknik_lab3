@@ -246,6 +246,13 @@ getChar:
         jmp getChar_part2
 
 
+.global getInPos
+getInPos:
+    # Rutinen ska returnera aktuell buffertposition för inbufferten.
+    # Returvärde: aktuell buffertposition (index)
+    movq input_buffer_pos, %rax
+    ret
+
 .global setInPos
 setInPos:
     # Rutinen ska sätta aktuell buffertposition för inbufferten till n. n måste dock ligga i intervallet
