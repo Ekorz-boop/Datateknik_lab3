@@ -52,9 +52,9 @@ get_current_output_buffer_value:
 
 get_current_input_buffer_value:
     # Get the value of the current input buffer position
-    movq $input_buffer, %r8 # Move the input buffer memory adress to r8
+    movq $input_buffer, %r8 # Move the input buffer memory address to r8
     addq input_buffer_pos, %r8 # Add the input buffer position to r8
-    movb (%r8), %al
+    movb (%r8), %al # Load the current character into al
     ret
 
 
@@ -92,41 +92,77 @@ getInt:
     # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
-    pushq $0 # Stack alignment thing
-    
     call get_current_input_buffer_value
     cmpb $0, %al # Check if empty input_buffer
     je getInt_call_inImage
     cmpb $MAXPOS, %al # Check if at last place in input_buffer
     je getInt_call_inImage
-    jmp after_callinImage
+    jmp getInt_main
 
     getInt_call_inImage:
         call inImage
 
-    after_callinImage:
-    
-    movq input_buffer, %rdi
-    
-    call atoi # Returns in eax
-    movslq %eax, %rax # Move with sign extend to rax for output
-    movq %rax, %rdi # Copy the output to rdi so we can increment over it to calc pos
+    getInt_main:
+        movq $input_buffer, %rdi
+        addq input_buffer_pos, %rdi
+        call atoi # Returns in rax
+        movq %rax, %rdi # Save atoi output in rdi
 
-    xorq %rcx, %rcx # Zero rcx and then use it to store length
-    getInt_calc_pos_loop:
-        movb (%rdi), %dl
-        cmpb $0, %dl
-        je exit_getInt_calc_pos_loop
-        incq %rdi
-        incq %rcx
+        xorq %rax, %rax # Reset rax
+        xorq %rcx, %rcx # Zero rcx (will use for length)
+        call get_current_input_buffer_value
+        cmpb $'-', %al
+        je handle_extra_sign
+
+        cmpb $'+', %al
+        je handle_extra_sign
+
+        cmpb $' ', %al
+        je handle_extra_sign
+
+        cmpb $'\n', %al
+        je redo_but_call_inImage
+
+        cmpb $'0', %al
+        jle handle_not_integer
+        cmpb $'9', %al
+        jge handle_not_integer
+
+        # If we didn't find any prefixes, the int has same length as the buffer space it took
         jmp getInt_calc_pos_loop
-    
+        
+    handle_not_integer:
+        movq %rdi, %rax # Return the value in rax
+        ret
+
+    handle_extra_sign:
+        addq $1, %rcx # Add one length since any whitespace/sign takes on place in buffer but not as an int
+
+    getInt_calc_pos_loop:
+        movq input_buffer_pos, %r8 # Get current pos of input buffer
+        addq %rcx, %r8 # Add the current length of the string to the current pos (skips the whitespace/sign)
+        movq $input_buffer, %r9 # Get the start of the input buffer
+        addq %r8, %r9 # Add the length of the string to the start of the input buffer
+        movb (%r9), %al # Get the character after the string
+        # Just exit loop if we find a non-integer character
+        cmpb $'0', %al 
+        jle exit_getInt_calc_pos_loop
+        cmpb $'9', %al
+        jge exit_getInt_calc_pos_loop
+        incq %rcx # Increment the length of the string
+        jmp getInt_calc_pos_loop
+
     exit_getInt_calc_pos_loop:
         movq input_buffer_pos, %r8 # Get current pos of input buffer
         addq %r8, %rcx # Add the length of the string to the current pos
         movq %rcx, input_buffer_pos # Update the input buffer pos to this new pos
-        pop %rax
+        movq %rdi, %rax # Return the value in rdi
         ret
+
+    redo_but_call_inImage:
+        incq input_buffer_pos
+        call inImage
+        jmp getInt
 
 
 .global getText
@@ -283,7 +319,7 @@ putInt:
 
         # Convert the digit to ASCII and put it into correct pos in reverse_buffer
         addb $48, %dl
-        movq reverse_int_buffer, %r8
+        movq $reverse_int_buffer, %r8
         addq reverse_int_buffer_pos, %r8
         movb %dl, (%r8) # Put the value into the reverse buffer
 
@@ -302,7 +338,7 @@ putInt:
         jle exit_putInt
 
         # Copy the character from reverse_buffer to output_buffer
-        movq reverse_int_buffer, %r8
+        movq $reverse_int_buffer, %r8
         addq reverse_int_buffer_pos, %r8
         movb (%r8), %al
         call put_into_output_buffer
@@ -367,7 +403,8 @@ putChar:
     # input: rdi = c
     call getChar # Get character c from input buffer
 
-    cmpq $MAXPOS, output_buffer # Check if the output buffer is full
+    call get_current_output_buffer_value
+    cmpb $MAXPOS, %al # Check if the output buffer is full
     je putChar_outImage # If the output buffer is full, call outImage to empty it
     
     call put_into_output_buffer # Move the character to the output buffer
