@@ -180,8 +180,6 @@ getText:
     # Returvärde: antal överförda tecken
     # Input: rsi = n, %rdi = buffert to move to
     # Save the inputs to r9 and r10
-    movq %rdi, %r9  # Save the destination buffer address
-    movq %rsi, %r10  # Save the maximum number of characters to read
     xorq %rax, %rax  # Will use rax as counter. Set it to 0
 
     # Check if the input buffer is at the end. If it is we need to refill input buffer
@@ -193,7 +191,7 @@ getText:
 
     getText_loop:
         # Check if we have read the maximum number of characters
-        cmpq %r10, %rax
+        cmpq %rsi, %rax
         je exit_getText_loop  # If we have, we are done
         call get_current_input_buffer_value # Returns in al
         # Check if the character is null
@@ -201,8 +199,8 @@ getText:
         je exit_getText_loop  # If it is, we are done
         incq input_buffer_pos # Increment the input buffer position
         # Write the character to the destination buffer
-        movb %al, (%r9)
-        incq %r9  # Increment the destination buffer adress
+        movb %al, (%rdi)
+        incq %rdi  # Increment the destination buffer adress
         incq %rax  # Increment the counter
         je getText_call_inImage  # If we have call inImage
         
@@ -213,8 +211,6 @@ getText:
         jmp getText_loop
 
     exit_getText_loop:
-        # Null-terminate the string
-        movb $0, (%r9)
         # Calculate and return the num of chars read
         ret
 
@@ -258,9 +254,9 @@ setInPos:
     # Parameter: önskad aktuell buffertposition (index), n i texten.
     # input: rdi = n
     cmpb $0, %dil
-    je setInPos_zero
+    jle setInPos_zero
     cmpb $MAXPOS, %dil
-    je setInPos_max
+    jge setInPos_max
     movb %dil, input_buffer_pos
     jmp exit_setInPos
 
@@ -437,9 +433,9 @@ setOutPos:
     # Parameter: önskad aktuell buffertposition (index), n i texten 
     # Input: rdi = n
     cmpb $0, %dil
-    je setOutPos_zero
+    jle setOutPos_zero
     cmpb $MAXPOS, %dil
-    je setOutPos_max
+    jge setOutPos_max
     movb %dil, output_buffer_pos
     jmp exit_setOutPos
 
