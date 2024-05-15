@@ -8,10 +8,10 @@
 .data
     input_buffer: .space 64 
     output_buffer: .space 64 
-    input_buffer_pos: .space 8
-    output_buffer_pos: .space 8
+    input_buffer_pos: .quad 0
+    output_buffer_pos: .quad 0
     reverse_int_buffer: .space 64
-    reverse_int_buffer_pos: .space 8
+    reverse_int_buffer_pos: .quad 0
     .equ MAXPOS, 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
@@ -24,6 +24,7 @@
 
 put_into_output_buffer:
     # al = value to put into output buffer
+    xorq %r8, %r8
     movq $output_buffer, %r8 # Move the output buffer memory adress to r8
     addq output_buffer_pos, %r8 # Add the output buffer position to r8
     movb %al, (%r8) # Put the value into the output buffer
@@ -224,26 +225,27 @@ getChar:
     # Returvärde: inläst tecken
     # output: rax = inläst tecken
 
-    call get_current_output_buffer_value
-    cmpb $MAXPOS, %al # Check if the output buffer is full
-    je getChar_call_inImage # If we reached the end of buffer, call inImage to get new characters
-    cmpb $0, %al # Check if first byte in buffer is zero (empty)
-    je getChar_call_inImage  # If the value in al is 0, jump to getChar_call_inImage
+    # Check if input buffer is full
+    cmpq input_buffer_pos, $MAXPOS
+    jl getChar_not_full_or_empty
 
-    getChar_part2: # Just to find back after calling inimage
+    # Check if input buffer is empty
+    movq    $input_buffer,%rax
+    addq    input_buffer_pos,%rax
+    movb    (%rax), %al
+    cmpb    $0, %al
+    jne getChar_not_full_or_empty
+    call inImage
 
-    movq $input_buffer, %r8 # Load input buffer adress into r8
-    addq input_buffer_pos, %r8 # Add pos onto adress to get current adress
-    movb (%r8), %al # Get that char
+    getChar_not_full_or_empty:
+        movq $input_buffer, %rax # Load input buffer adress into r8
+        addq input_buffer_pos, %rax # Add pos onto adress to get current adress
+        movb (%rax), %al # Get that char
 
-    incq input_buffer_pos # Increment the input buffer position
+        incq input_buffer_pos # Increment the input buffer position
 
     # Terminate getChar
     ret
-
-    getChar_call_inImage:
-        call inImage
-        jmp getChar_part2
 
 
 .global getInPos
@@ -290,6 +292,7 @@ outImage:
 
     movq $output_buffer, %rdi # Move value of outbuffer to rdi
     call puts # Puts prints buffer in rdi to terminal
+
     movq $0, output_buffer_pos # Reset output buffer position
     
     # Terminate outImage
@@ -305,17 +308,21 @@ putInt:
     # input: rdi = int
     
     movq $0, reverse_int_buffer_pos # Reset reverse buffer pos
+    movq %rdi, %rax
+    cmpq $0, %rax
+    jge convert_int_loop
+    movq $45, %rdi
+    call putChar
 
     convert_int_loop:
         # Check if the number is 0, if it is we are done
-        cmpq $0, %rdi
-        je copy_reverse_loop
+        cmpq $0, %rax
+        je before_reverse
         
         # Get the least significant digit of the number
         # Remainder in rdx
         # Quotient in rax
         # Put rdi in rax
-        movq %rdi, %rax
         movq $10, %r10
         xorq %rdx, %rdx
         divq %r10
@@ -334,6 +341,9 @@ putInt:
 
         # Continue loop with the next digit
         jmp convert_int_loop
+
+    before_reverse:
+        decq reverse_int_buffer_pos
 
     copy_reverse_loop:
         # Check if reverse buffer is empty
@@ -365,36 +375,19 @@ putText:
     # att jobba vidare mot.
     # Parameter: adress som strängen ska hämtas till utbufferten ifrån (buf i texten)
     # Input: rdi = buf
-
-    # Check if the output buffer is full
-    call get_current_output_buffer_value
-    cmpb $MAXPOS, %al # Check if the output buffer is full
-    jne putText_loop # If it's not full, continue with the loop
-    call outImage # If it's full, call outImage to empty the output buffer
+    movq %rdi, %r10 # Move the input to r10 so we can use rdi in our loop
 
     putText_loop:
-        movb (%rdi), %al # Get first 8 bits of the string
-        cmpb $0, %al # Check if it's 0, if it is we are done
-        je exit_putText_loop
+        cmpb $0, (%r10) # Check if the buf given as input is empty
+        je exit_putText_loop # Exit
+        movq (%r10), %rdi # If its not empty, move it to rdi so we can call putChar
+        call putChar # Call putchar to put char. Putchar will handle if it gets full
+        incq %r10 # Increment the r10 adress to read next char next time
+        jmp putText_loop # Loop
         
-        # Move the first 8 bits of n into the output buffer at the current position
-        # rbx = output buffer memory adress, rcx = output buffer pos, al = value to put into output buffer
-        call put_into_output_buffer
-        
-        call get_current_output_buffer_value
-        cmpb $MAXPOS, %al # Check if the output buffer is full
-        je putText_outImage 
-        continue_after_putText_outImage:
-        incq %rdi # Move to the next character in the string
-        incq output_buffer_pos # Increment the output buffer position
-        jmp putText_loop # Continue with the next character
-
     exit_putText_loop:
+        # Terminate putText
         ret
-
-    putText_outImage:
-        call outImage
-        jmp continue_after_putText_outImage
 
 
 .global putChar
@@ -404,24 +397,13 @@ putChar:
     # får en tömd utbuffert att jobba vidare mot.
     # Parameter: tecknet som ska läggas i utbufferten (c i texten)
     # input: rdi = c
-    call getChar # Get character c from input buffer
+    call getChar
+    cmpq output_buffer_pos, $MAXPOS
+    jl putChar_not_full
+    call outImage
 
-    call get_current_output_buffer_value
-    cmpb $MAXPOS, %al # Check if the output buffer is full
-    je putChar_outImage # If the output buffer is full, call outImage to empty it
-    
-    call put_into_output_buffer # Move the character to the output buffer
-    incq output_buffer_pos # Increment the output buffer position
-    jmp exit_putChar # Done, let's exit
-
-    putChar_outImage:
-        call outImage # Call outImage to empty the output buffer
-        call put_into_output_buffer # Move the character to the output buffer
-        incq output_buffer_pos # Increment the output buffer position
-
-    exit_putChar:
-        # Terminate putChar
-        ret
+    putChar_not_full:
+        
 
 
 .global getOutPos
