@@ -57,13 +57,6 @@ getInt:
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
     
-    movq    $input_buffer,%rax
-    addq    input_buffer_pos,%rax
-    movb    (%rax), %al
-    cmpb    $0, %al
-    jne getInt_not_full_or_empty
-    call inImage
-
     getInt_not_full_or_empty:
         movq $input_buffer, %rdi
         addq input_buffer_pos, %rdi
