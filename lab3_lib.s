@@ -12,7 +12,7 @@
     output_buffer_pos: .quad 0
     reverse_int_buffer: .space 64
     reverse_int_buffer_pos: .quad 0
-    .equ MAXPOS, 64
+    MAXPOS: .quad 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
 # Checked functions: setInPos, setOutPos, getOutPos, outImage, inImage, putInt, , putText, putChar
@@ -93,17 +93,19 @@ getInt:
     # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
-    call get_current_input_buffer_value
-    cmpb $0, %al # Check if empty input_buffer
-    je getInt_call_inImage
-    cmpb $MAXPOS, %al # Check if at last place in input_buffer
-    je getInt_call_inImage
-    jmp getInt_main
+    # Check if input buffer is full
+    cmpq $input_buffer_pos, MAXPOS
+    jl getInt_not_full_or_empty
 
-    getInt_call_inImage:
-        call inImage
+    # Check if input buffer is empty
+    movq    $input_buffer,%rax
+    addq    input_buffer_pos,%rax
+    movb    (%rax), %al
+    cmpb    $0, %al
+    jne getInt_not_full_or_empty
+    call inImage
 
-    getInt_main:
+    getInt_not_full_or_empty:
         movq $input_buffer, %rdi
         addq input_buffer_pos, %rdi
         call atoi # Returns in rax
@@ -157,7 +159,7 @@ getInt:
         movq input_buffer_pos, %r8 # Get current pos of input buffer
         addq %r8, %rcx # Add the length of the string to the current pos
         movq %rcx, input_buffer_pos # Update the input buffer pos to this new pos
-        movq %rdi, %rax # Return the value in rdi
+        movq %rdi, %rax # Return the value in rdi (put in rax)
         ret
 
     redo_but_call_inImage:
@@ -180,40 +182,29 @@ getText:
     # Parameter 2: maximalt antal tecken att läsa från inmatningsbufferten (n i texten)
     # Returvärde: antal överförda tecken
     # Input: rsi = n, %rdi = buffert to move to
-    # Save the inputs to r9 and r10
-    xorq %rax, %rax  # Will use rax as counter. Set it to 0
 
-    # Check if the input buffer is at the end. If it is we need to refill input buffer
-    call get_current_input_buffer_value
-    cmpb $MAXPOS, %al
-    jge getText_call_inImage
-    cmpb $0, %al
-    jle getText_call_inImage
+    # Save the inputs to r9 and r10
+    movq %rsi, %r9 # n in r9
+    movq %rdi, %r10 # buffert in r10
 
     getText_loop:
-        # Check if we have read the maximum number of characters
-        cmpq %rsi, %rax
-        je exit_getText_loop  # If we have, we are done
-        call get_current_input_buffer_value # Returns in al
-        # Check if the character is null
-        cmpb $0, %al
-        je exit_getText_loop  # If it is, we are done
-        incq input_buffer_pos # Increment the input buffer position
-        # Write the character to the destination buffer
-        movb %al, (%rdi)
-        incq %rdi  # Increment the destination buffer adress
-        incq %rax  # Increment the counter
-        je getText_call_inImage  # If we have call inImage
-        
-        jmp getText_loop
+        call getChar # Get current char. getChar handles empty/full buffer
+        cmpb $0, %al # Is char 0? Then we are done
+        je exit_getText_loop # If so, exit
 
-    getText_call_inImage:
-        call inImage
-        jmp getText_loop
+        cmpq $0, %r9 # Have we succeeded max number of chars to read?
+        je exit_getText_loop # If so, exit
+
+        movb %al, (%r10)
+        incq %r10 # Increase position 
+        decq %r9 # Decrease counter
+
+        jmp getText_loop # Loop
 
     exit_getText_loop:
-        # Calculate and return the num of chars read
-        ret
+        subq %rsi, %r9 # Calculate how many chars we read
+        movq %r9, %rax # Return the value in rax
+        ret 
 
 
 .global getChar
@@ -226,7 +217,7 @@ getChar:
     # output: rax = inläst tecken
 
     # Check if input buffer is full
-    cmpq input_buffer_pos, $MAXPOS
+    cmpq $input_buffer_pos, MAXPOS
     jl getChar_not_full_or_empty
 
     # Check if input buffer is empty
@@ -262,11 +253,11 @@ setInPos:
     # till 0, om n>MAXPOS, sätt den till MAXPOS.
     # Parameter: önskad aktuell buffertposition (index), n i texten.
     # input: rdi = n
-    cmpb $0, %dil
+    cmpq $0, %rdi
     jle setInPos_zero
-    cmpb $MAXPOS, %dil
+    cmpq MAXPOS, %rdi
     jge setInPos_max
-    movb %dil, input_buffer_pos
+    movq %rdi, input_buffer_pos
     jmp exit_setInPos
 
     setInPos_zero:
@@ -397,13 +388,20 @@ putChar:
     # får en tömd utbuffert att jobba vidare mot.
     # Parameter: tecknet som ska läggas i utbufferten (c i texten)
     # input: rdi = c
-    call getChar
-    cmpq output_buffer_pos, $MAXPOS
+    call getChar # Returns in rax
+    
+    cmpq $output_buffer_pos, MAXPOS
     jl putChar_not_full
     call outImage
 
     putChar_not_full:
-        
+        movq $output_buffer, %r8 # Load output buffer adress into r8
+        addq output_buffer_pos, %r8 # Add pos onto adress to get current adress
+        movq %rdi, (%r8) # Put the char into the output buffer
+
+        incq output_buffer_pos # Increment the output buffer position
+
+    ret
 
 
 .global getOutPos
@@ -421,11 +419,11 @@ setOutPos:
     # n>MAXPOS sätt den till MAXPOS.
     # Parameter: önskad aktuell buffertposition (index), n i texten 
     # Input: rdi = n
-    cmpb $0, %dil
+    cmpq $0, %rdi
     jle setOutPos_zero
-    cmpb $MAXPOS, %dil
+    cmpq MAXPOS, %rdi
     jge setOutPos_max
-    movb %dil, output_buffer_pos
+    movq %rdi, output_buffer_pos
     jmp exit_setOutPos
 
     setOutPos_zero:
