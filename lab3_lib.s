@@ -126,11 +126,6 @@ getInt:
         cmpb $'\n', %al
         je redo_but_call_inImage
 
-        cmpb $'0', %al
-        jle handle_not_integer
-        cmpb $'9', %al
-        jge handle_not_integer
-
         # If we didn't find any prefixes, the int has same length as the buffer space it took
         jmp getInt_calc_pos_loop
         
@@ -142,22 +137,24 @@ getInt:
         addq $1, %rcx # Add one length since any whitespace/sign takes on place in buffer but not as an int
 
     getInt_calc_pos_loop:
-        movq input_buffer_pos, %r8 # Get current pos of input buffer
-        addq %rcx, %r8 # Add the current length of the string to the current pos (skips the whitespace/sign)
-        movq $input_buffer, %r9 # Get the start of the input buffer
-        addq %r8, %r9 # Add the length of the string to the start of the input buffer
-        movb (%r9), %al # Get the character after the string
-        # Just exit loop if we find a non-integer character
+        movq $input_buffer, %r8 # Get the start of the input buffer
+        addq input_buffer_pos, %r8 # Add the current pos to the start of the input buffer
+        addq %rcx, %r8 # Add the current length of the string to the current pos
+        movb (%r8), %al # Get the character 
+
+        # Exit loop if we find a non-integer character
         cmpb $'0', %al 
         jle exit_getInt_calc_pos_loop
         cmpb $'9', %al
         jge exit_getInt_calc_pos_loop
+
         incq %rcx # Increment the length of the string
+
         jmp getInt_calc_pos_loop
 
     exit_getInt_calc_pos_loop:
-        movq input_buffer_pos, %r8 # Get current pos of input buffer
-        addq %r8, %rcx # Add the length of the string to the current pos
+        movq input_buffer_pos, %r9 # Get current pos of input buffer
+        addq %r9, %rcx # Add the true pos of the reverse buffer to the current pos
         movq %rcx, input_buffer_pos # Update the input buffer pos to this new pos
         movq %rdi, %rax # Return the value in rdi (put in rax)
         ret
@@ -298,64 +295,46 @@ putInt:
     # Parameter: tal som ska läggas in i bufferten (n i texten)
     # input: rdi = int
     
-    movq $0, reverse_int_buffer_pos # Reset reverse buffer pos
     movq %rdi, %rax
-    cmpq $0, %rax
-    jge convert_int_loop
-    movq $45, %rdi
-    call putChar
+    cmpq $0, %rax # Compare the int to 0
+    jge putInt_convert_int_loop # If it is greater than zero (not neg), use the convert loop
+    movq $45, %rdi # Put ascii for minus sign in rdi
+    call putChar # Put the minus sign with putchar
+    imulq $-1, %rax # Reset to a positive number
 
-    convert_int_loop:
+    xorq %rcx, %rcx # Zero rcx (will use for counter)
+
+    putInt_convert_int_loop:
         # Check if the number is 0, if it is we are done
         cmpq $0, %rax
-        je before_reverse
-        
+        je putInt_put_loop
         # Get the least significant digit of the number
-        # Remainder in rdx
-        # Quotient in rax
-        # Put rdi in rax
+        # Remainder will be put in rdx
+        # Quotient will be put in rax
         movq $10, %r10
-        xorq %rdx, %rdx
-        divq %r10
+        movq $0, %rdx
+        idivq %r10
 
         # Convert the digit to ASCII and put it into correct pos in reverse_buffer
-        addb $48, %dl
-        movq $reverse_int_buffer, %r8
-        addq reverse_int_buffer_pos, %r8
-        movb %dl, (%r8) # Put the value into the reverse buffer
+        addq $48, %rdx # Add 48 to get the ascii value for the int
+        pushq %rdx # Push the ascii value to the stack
 
-        # Increment the reverse buffer position
-        incq reverse_int_buffer_pos
+        incq %rcx # Increment counter
 
-        # Update %rdi with the quotient of the division
-        movq %rax, %rdi
+        # Check if we have a quotient left
+        cmpq $0, %rax
+        jne putInt_convert_int_loop # If we have a quotient left, continue loop
 
-        # Continue loop with the next digit
-        jmp convert_int_loop
+    putInt_put_loop:
+        popq %rdi # Pop the ascii value from the stack. Put in rdi so we can use putChar
+        call putChar # Put the char in the output buffer
+        decq %rcx # Decrease the counter
+        cmpq $0, %rcx # Check if we have more chars to put (counter is not zero)
+        jne putInt_put_loop # If we have more chars to put, continue loop
 
-    before_reverse:
-        decq reverse_int_buffer_pos
+    # Terminate putInt
+    ret
 
-    copy_reverse_loop:
-        # Check if reverse buffer is empty
-        cmpq $0, reverse_int_buffer_pos
-        jle exit_putInt
-
-        # Copy the character from reverse_buffer to output_buffer
-        movq $reverse_int_buffer, %r8
-        addq reverse_int_buffer_pos, %r8
-        movb (%r8), %al
-        call put_into_output_buffer
-
-        # Decrement reverse_buffer_pos
-        decq reverse_int_buffer_pos
-        # Increment output_buffer_pos
-        incq output_buffer_pos
-        # Continue with the next character
-        jmp copy_reverse_loop
-
-    exit_putInt:
-        ret
 
 
 .global putText
@@ -388,7 +367,6 @@ putChar:
     # får en tömd utbuffert att jobba vidare mot.
     # Parameter: tecknet som ska läggas i utbufferten (c i texten)
     # input: rdi = c
-    call getChar # Returns in rax
     
     cmpq $output_buffer_pos, MAXPOS
     jl putChar_not_full
