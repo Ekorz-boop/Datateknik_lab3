@@ -56,11 +56,7 @@ getInt:
     # är vid dess slut vid anrop av getInt ska getInt kalla på inImage, så att getInt alltid
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
-    # Check if input buffer is full
-    cmpq $input_buffer_pos, MAXPOS
-    jl getInt_not_full_or_empty
-
-    # Check if input buffer is empty
+    
     movq    $input_buffer,%rax
     addq    input_buffer_pos,%rax
     movb    (%rax), %al
