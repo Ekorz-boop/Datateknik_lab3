@@ -57,6 +57,18 @@ getInt:
     # returnerar värdet av ett inmatat tal.
     # Returvärde: inläst heltal
     
+    # Check if input buffer is full
+    cmpq $input_buffer_pos, MAXPOS
+    jl getInt_not_full_or_empty
+
+    # Check if input buffer is empty
+    movq    $input_buffer,%rax
+    addq    input_buffer_pos,%rax
+    movb    (%rax), %al
+    cmpb    $0, %al
+    jne getChar_not_full_or_empty
+    call inImage
+
     getInt_not_full_or_empty:
         movq $input_buffer, %rdi
         addq input_buffer_pos, %rdi
@@ -78,15 +90,18 @@ getInt:
         je handle_extra_sign
 
         cmpb $' ', %al
-        je handle_extra_sign
+        je handle_whitespace
 
         cmpb $'\n', %al
         je redo_but_call_inImage
 
         cmpb $'0', %al
-        je handle_not_integer
+        jle handle_true_zero
+
+        cmpb $'0', %al
+        jl handle_not_integer
         cmpb $'9', %al
-        je handle_not_integer
+        jg handle_not_integer
 
         # If we didn't find any prefixes, the int has same length as the buffer space it took
         jmp getInt_calc_pos_loop
@@ -94,6 +109,16 @@ getInt:
     handle_not_integer:
         movq %rdi, %rax # Return the value in rax
         ret
+
+    handle_true_zero:
+        movq $0, %rdi # Return 0 if we find a zero
+        incq input_buffer_pos # Increment the input buffer position
+        ret
+
+    handle_whitespace:
+        incq %rcx # Increment the length of the string
+        incq input_buffer_pos # Increment the input buffer position
+        jmp getInt_calc_pos_loop
 
     handle_extra_sign:
         addq $1, %rcx # Add one length since any whitespace/sign takes on place in buffer but not as an int
