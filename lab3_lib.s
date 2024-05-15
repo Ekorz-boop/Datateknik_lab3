@@ -31,12 +31,13 @@ inImage:
     # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
     pushq $0
     movq $input_buffer, %rdi # arg1 for fgets. The buffer where fgets puts the input
+    addq input_buffer_pos, %rdi
     movq MAXPOS, %rsi # arg2 for fgets. How many bytes it can read
     movq stdin, %rdx # arg3 for fgets. From standard input
     call fgets
     
     # Reset input buffer position
-    movq $0, input_buffer_pos
+    # movq $0, input_buffer_pos
 
     # Terminate inImage
     pop %rax
