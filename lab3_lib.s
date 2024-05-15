@@ -111,7 +111,7 @@ getInt:
         ret
 
     handle_true_zero:
-        movq $0, %rdi # Return 0 if we find a zero
+        movq $0, %rax # Return 0 if we find a zero
         incq input_buffer_pos # Increment the input buffer position
         ret
 
