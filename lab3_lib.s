@@ -20,45 +20,6 @@
 
 .text
 
-# --- Egna funktioner ---
-
-put_into_output_buffer:
-    # al = value to put into output buffer
-    xorq %r8, %r8
-    movq $output_buffer, %r8 # Move the output buffer memory adress to r8
-    addq output_buffer_pos, %r8 # Add the output buffer position to r8
-    movb %al, (%r8) # Put the value into the output buffer
-
-    # Terminate put_into_output_buffer
-    ret
-
-
-put_into_input_buffer:
-    # al = value to put into input buffer
-    movq $input_buffer, %r8 # Move the output buffer memory adress to r8
-    addq input_buffer_pos, %r8 # Add the output buffer position to r8
-    movb %al, (%r8) # Put the value into the input buffer
-
-    # Terminate put_into_input_buffer
-    ret
-
-
-get_current_output_buffer_value:
-    # Get the value of the current input buffer position
-    movq $output_buffer, %r8 # Move the output buffer memory adress to r8
-    addq output_buffer_pos, %r8 # Add the output buffer position to r8
-    movb (%r8), %al
-    ret
-
-
-get_current_input_buffer_value:
-    # Get the value of the current input buffer position
-    movq $input_buffer, %r8 # Move the input buffer memory address to r8
-    addq input_buffer_pos, %r8 # Add the input buffer position to r8
-    movb (%r8), %al # Load the current character into al
-    ret
-
-
 # --------- Inmatning ---------
 
 .global inImage
@@ -68,16 +29,17 @@ inImage:
     # jobba mot den här bufferten. Om inmatningsbufferten är tom eller den aktuella positionen
     # är vid buffertens slut när någon av de andra inläsningsrutinerna nedan anropas ska inImage
     # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
-    pushq $0 # Uses external function call
+    pushq $0
     movq $input_buffer, %rdi # arg1 for fgets. The buffer where fgets puts the input
-    movq $MAXPOS, %rsi # arg2 for fgets. How many bytes it can read
+    movq MAXPOS, %rsi # arg2 for fgets. How many bytes it can read
     movq stdin, %rdx # arg3 for fgets. From standard input
     call fgets
     
-    movq $0, input_buffer_pos # Reset input buffer position
+    # Reset input buffer position
+    movq $0, input_buffer_pos
 
     # Terminate inImage
-    popq %rax
+    pop %rax
     ret
 
 
@@ -113,7 +75,12 @@ getInt:
 
         xorq %rax, %rax # Reset rax
         xorq %rcx, %rcx # Zero rcx (will use for length)
-        call get_current_input_buffer_value
+
+        movq $input_buffer, %r8 # Move the input buffer memory address to r8
+        addq input_buffer_pos, %r8 # Add the input buffer position to r8
+        movb (%r8), %al # Load the current character into al
+        xorq %r8, %r8
+
         cmpb $'-', %al
         je handle_extra_sign
 
