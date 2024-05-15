@@ -93,6 +93,11 @@ getInt:
         cmpb $'\n', %al
         je redo_but_call_inImage
 
+        cmpb $'0', %al
+        je handle_not_integer
+        cmpb $'9', %al
+        je handle_not_integer
+
         # If we didn't find any prefixes, the int has same length as the buffer space it took
         jmp getInt_calc_pos_loop
         
@@ -264,21 +269,18 @@ putInt:
     
     movq %rdi, %rax
     cmpq $0, %rax # Compare the int to 0
-    jge putInt_convert_int_loop # If it is greater than zero (not neg), use the convert loop
+    jge putInt_input_positive # If it is greater than zero (not neg), use the convert loop
     movq $45, %rdi # Put ascii for minus sign in rdi
     call putChar # Put the minus sign with putchar
     imulq $-1, %rax # Reset to a positive number
 
-    xorq %rcx, %rcx # Zero rcx (will use for counter)
-
+    putInt_input_positive:
+        movq $0, %rcx # Zero rcx (will use for length)
+        movq $10, %r10 # will use for modulo
     putInt_convert_int_loop:
-        # Check if the number is 0, if it is we are done
-        cmpq $0, %rax
-        je putInt_put_loop
         # Get the least significant digit of the number
         # Remainder will be put in rdx
         # Quotient will be put in rax
-        movq $10, %r10
         movq $0, %rdx
         idivq %r10
 
@@ -301,7 +303,6 @@ putInt:
 
     # Terminate putInt
     ret
-
 
 
 .global putText
