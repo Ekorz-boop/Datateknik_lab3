@@ -255,7 +255,7 @@ setInPos:
     # input: rdi = n
     cmpq $0, %rdi
     jle setInPos_zero
-    cmpq MAXPOS, %rdi
+    cmpq $MAXPOS, %rdi
     jge setInPos_max
     movq %rdi, input_buffer_pos
     jmp exit_setInPos
@@ -421,7 +421,7 @@ setOutPos:
     # Input: rdi = n
     cmpq $0, %rdi
     jle setOutPos_zero
-    cmpq MAXPOS, %rdi
+    cmpq $MAXPOS, %rdi
     jge setOutPos_max
     movq %rdi, output_buffer_pos
     jmp exit_setOutPos
