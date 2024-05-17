@@ -10,8 +10,6 @@
     output_buffer: .space 64 
     input_buffer_pos: .quad 0
     output_buffer_pos: .quad 0
-    getInt_buffer: .space 64
-    getInt_buffer_pos: .quad 0
     MAXPOS: .quad 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
