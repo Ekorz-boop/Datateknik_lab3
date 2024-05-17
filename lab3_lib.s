@@ -10,8 +10,6 @@
     output_buffer: .space 64 
     input_buffer_pos: .quad 0
     output_buffer_pos: .quad 0
-    reverse_int_buffer: .space 64
-    reverse_int_buffer_pos: .quad 0
     MAXPOS: .quad 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
@@ -31,13 +29,12 @@ inImage:
     # anropas av den rutinen, så att det alltid finns ny data att arbeta med.
     pushq $0
     movq $input_buffer, %rdi # arg1 for fgets. The buffer where fgets puts the input
-    addq input_buffer_pos, %rdi
     movq MAXPOS, %rsi # arg2 for fgets. How many bytes it can read
     movq stdin, %rdx # arg3 for fgets. From standard input
     call fgets
     
     # Reset input buffer position
-    # movq $0, input_buffer_pos
+    movq $0, input_buffer_pos
 
     # Terminate inImage
     pop %rax
@@ -62,17 +59,17 @@ getInt:
     jl getInt_not_full_or_empty
 
     # Check if input buffer is empty
-    movq    $input_buffer,%rax
-    addq    input_buffer_pos,%rax
-    movb    (%rax), %al
-    cmpb    $0, %al
-    jne getChar_not_full_or_empty
-    call inImage
+    movq    $input_buffer,%rax # Put buffer adress in rax
+    addq    input_buffer_pos,%rax # Add on current position
+    movb    (%rax), %al # Take first char
+    cmpb    $0, %al # Is it zero
+    jne getChar_not_full_or_empty # If its not zero we can proceed without calling inImage
+    call inImage # Call inimage to refill
 
     getInt_not_full_or_empty:
-        movq $input_buffer, %rdi
-        addq input_buffer_pos, %rdi
-        call atoi # Returns in rax
+        movq $input_buffer, %rdi # Input buffer start adress to rdi
+        addq input_buffer_pos, %rdi # Add on current position
+        call atoi # Returns in rax. Atoi gets first interger in string. If no int it returns zero
         movq %rax, %rdi # Save atoi output in rdi
 
         xorq %rax, %rax # Reset rax
@@ -81,23 +78,24 @@ getInt:
         movq $input_buffer, %r8 # Move the input buffer memory address to r8
         addq input_buffer_pos, %r8 # Add the input buffer position to r8
         movb (%r8), %al # Load the current character into al
-        xorq %r8, %r8
+        xorq %r8, %r8 # Reset r8
 
-        cmpb $'-', %al
-        je handle_extra_sign
+        cmpb $'-', %al 
+        je handle_extra_sign # If we find a minus sign
 
         cmpb $'+', %al
-        je handle_extra_sign
+        je handle_extra_sign # If we find a plus sign
 
         cmpb $' ', %al
-        je handle_whitespace
+        je handle_whitespace # If we find a whitespace
 
         cmpb $'\n', %al
-        je redo_but_call_inImage
+        je redo_but_call_inImage # If we find a newline
 
         cmpb $'0', %al
-        jle handle_true_zero
+        jle handle_true_zero # If we find a zero
 
+        # If no numbers are found, return the value in rdi. It should be 0 since atoi didn't find any numbers
         cmpb $'0', %al
         jl handle_not_integer
         cmpb $'9', %al
@@ -147,9 +145,9 @@ getInt:
         ret
 
     redo_but_call_inImage:
-        incq input_buffer_pos
-        call inImage
-        jmp getInt
+        incq input_buffer_pos # Increment the input buffer position
+        call inImage # Call inImage to refill
+        jmp getInt # Restart the getInt function
 
 
 .global getText
@@ -179,7 +177,7 @@ getText:
         cmpq $0, %r9 # Have we succeeded max number of chars to read?
         je exit_getText_loop # If so, exit
 
-        movb %al, (%r10)
+        movb %al, (%r10) # Move char to destination buf
         incq %r10 # Increase position 
         decq %r9 # Decrease counter
 
@@ -200,16 +198,17 @@ getChar:
     # Returvärde: inläst tecken
     # output: rax = inläst tecken
 
+    # Check if input buffer is empty
+    movq    $input_buffer, %rax # Get buffer adress
+    addq    input_buffer_pos, %rax # Add current pos
+    movb    (%rax), %al # Get frist char
+    cmpb    $0, %al # Is it zero?
+    jne getChar_not_full_or_empty # If not zero we can skip the inImage call
+
     # Check if input buffer is full
     cmpq $input_buffer_pos, MAXPOS
-    jl getChar_not_full_or_empty
+    jl getChar_not_full_or_empty # If not full we can skip inImage call
 
-    # Check if input buffer is empty
-    movq    $input_buffer,%rax
-    addq    input_buffer_pos,%rax
-    movb    (%rax), %al
-    cmpb    $0, %al
-    jne getChar_not_full_or_empty
     call inImage
 
     getChar_not_full_or_empty:
@@ -227,7 +226,7 @@ getChar:
 getInPos:
     # Rutinen ska returnera aktuell buffertposition för inbufferten.
     # Returvärde: aktuell buffertposition (index)
-    movq input_buffer_pos, %rax
+    movq input_buffer_pos, %rax # Move the value of input_buffer_pos to rax
     ret
 
 .global setInPos
@@ -237,19 +236,19 @@ setInPos:
     # till 0, om n>MAXPOS, sätt den till MAXPOS.
     # Parameter: önskad aktuell buffertposition (index), n i texten.
     # input: rdi = n
-    cmpq $0, %rdi
-    jle setInPos_zero
-    cmpq $MAXPOS, %rdi
-    jge setInPos_max
-    movq %rdi, input_buffer_pos
+    cmpq $0, %rdi # Compare the input to 0
+    jle setInPos_zero # If it is less than zero, set to zero
+    cmpq $MAXPOS, %rdi # Compare the input to MAXPOS
+    jge setInPos_max # If it is greater than MAXPOS, set to MAXPOS
+    movq %rdi, input_buffer_pos # Set the input buffer position to the input
     jmp exit_setInPos
 
     setInPos_zero:
-        movq $0, input_buffer_pos
+        movq $0, input_buffer_pos # Set the input buffer position to 0
         jmp exit_setOutPos
 
     setInPos_max:
-        movq $MAXPOS, input_buffer_pos
+        movq $MAXPOS, input_buffer_pos # Set the input buffer position to MAXPOS
         jmp exit_setOutPos
 
     exit_setInPos:
@@ -282,7 +281,7 @@ putInt:
     # Parameter: tal som ska läggas in i bufferten (n i texten)
     # input: rdi = int
     
-    movq %rdi, %rax
+    movq %rdi, %rax # Save rdi in rax, since we need rdi to use putChar
     cmpq $0, %rax # Compare the int to 0
     jge putInt_input_positive # If it is greater than zero (not neg), use the convert loop
     movq $45, %rdi # Put ascii for minus sign in rdi
@@ -351,7 +350,8 @@ putChar:
     # Parameter: tecknet som ska läggas i utbufferten (c i texten)
     # input: rdi = c
     
-    cmpq $output_buffer_pos, MAXPOS
+    # Check if output buffer is full
+    cmpq $output_buffer_pos, MAXPOS 
     jl putChar_not_full
     call outImage
 
@@ -369,7 +369,7 @@ putChar:
 getOutPos:
     # Rutinen ska returnera aktuell buffertposition för utbufferten.
     # Returvärde: aktuell buffertposition (index)
-    movq output_buffer_pos, %rax
+    movq output_buffer_pos, %rax # Move the value of output_buffer_pos to rax
     ret
 
 
@@ -380,19 +380,20 @@ setOutPos:
     # n>MAXPOS sätt den till MAXPOS.
     # Parameter: önskad aktuell buffertposition (index), n i texten 
     # Input: rdi = n
-    cmpq $0, %rdi
-    jle setOutPos_zero
-    cmpq $MAXPOS, %rdi
-    jge setOutPos_max
-    movq %rdi, output_buffer_pos
+
+    cmpq $0, %rdi # Compare the input to 0
+    jle setOutPos_zero # If it is less than zero, set to zero
+    cmpq $MAXPOS, %rdi # Compare the input to MAXPOS
+    jge setOutPos_max # If it is greater than MAXPOS, set to MAXPOS
+    movq %rdi, output_buffer_pos # Set the output buffer position to the input
     jmp exit_setOutPos
 
     setOutPos_zero:
-        movq $0, output_buffer_pos
+        movq $0, output_buffer_pos # Set the output buffer position to 0
         jmp exit_setOutPos
 
     setOutPos_max:
-        movq $MAXPOS, output_buffer_pos
+        movq $MAXPOS, output_buffer_pos # Set the output buffer position to MAXPOS
         jmp exit_setOutPos
 
     exit_setOutPos:
