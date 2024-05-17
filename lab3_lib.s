@@ -10,6 +10,8 @@
     output_buffer: .space 64 
     input_buffer_pos: .quad 0
     output_buffer_pos: .quad 0
+    getInt_buffer: .space 64
+    getInt_buffer_pos: .quad 0
     MAXPOS: .quad 64
 
 # OBS! Lägg till en extra pushq $0 / popq %rax i de funktioner som anropar externa funktioner.
@@ -17,6 +19,7 @@
 # Unchecked functions: getInt, getText, getChar
 
 .text
+
 
 # --------- Inmatning ---------
 
@@ -129,9 +132,9 @@ getInt:
 
         # Exit loop if we find a non-integer character
         cmpb $'0', %al 
-        jle exit_getInt_calc_pos_loop
+        jl exit_getInt_calc_pos_loop
         cmpb $'9', %al
-        jge exit_getInt_calc_pos_loop
+        jg exit_getInt_calc_pos_loop
 
         incq %rcx # Increment the length of the string
 
